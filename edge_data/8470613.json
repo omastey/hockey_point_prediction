@@ -1,0 +1,349 @@
+{
+  "player": {
+    "id": 8470613,
+    "firstName": {
+      "default": "Brent"
+    },
+    "lastName": {
+      "default": "Burns"
+    },
+    "birthDate": "1985-03-09",
+    "shootsCatches": "R",
+    "sweaterNumber": 8,
+    "position": "D",
+    "slug": "brent-burns-8470613",
+    "headshot": "https://assets.nhle.com/mugs/nhl/20242025/CAR/8470613.png",
+    "goals": 6,
+    "assists": 23,
+    "points": 29,
+    "gamesPlayed": 82,
+    "team": {
+      "commonName": {
+        "default": "Hurricanes"
+      },
+      "placeNameWithPreposition": {
+        "default": "Carolina",
+        "fr": "de la Caroline"
+      },
+      "abbrev": "CAR",
+      "teamLogo": {
+        "light": "https://assets.nhle.com/logos/nhl/svg/CAR_light.svg",
+        "dark": "https://assets.nhle.com/logos/nhl/svg/CAR_dark.svg"
+      }
+    }
+  },
+  "seasonsWithEdgeStats": [
+    {
+      "id": 20212022,
+      "gameTypes": [
+        2
+      ]
+    },
+    {
+      "id": 20222023,
+      "gameTypes": [
+        2,
+        3
+      ]
+    },
+    {
+      "id": 20232024,
+      "gameTypes": [
+        2,
+        3
+      ]
+    },
+    {
+      "id": 20242025,
+      "gameTypes": [
+        2,
+        3
+      ]
+    },
+    {
+      "id": 20252026,
+      "gameTypes": [
+        2
+      ]
+    }
+  ],
+  "topShotSpeed": {
+    "imperial": 92.64,
+    "metric": 149.0896,
+    "percentile": 0.6656,
+    "leagueAvg": {
+      "imperial": 89.6942,
+      "metric": 144.3488
+    },
+    "overlay": {
+      "player": {
+        "firstName": {
+          "default": "Brent"
+        },
+        "lastName": {
+          "default": "Burns"
+        }
+      },
+      "gameDate": "2025-04-02",
+      "awayTeam": {
+        "abbrev": "WSH",
+        "score": 1
+      },
+      "homeTeam": {
+        "abbrev": "CAR",
+        "score": 5
+      },
+      "gameOutcome": {
+        "lastPeriodType": "REG"
+      },
+      "periodDescriptor": {
+        "maxRegulationPeriods": 3,
+        "number": 3,
+        "periodType": "REG"
+      },
+      "timeInPeriod": "10:34",
+      "gameType": 2
+    }
+  },
+  "skatingSpeed": {
+    "speedMax": {
+      "imperial": 21.718,
+      "metric": 34.952,
+      "percentile": 0.5377,
+      "leagueAvg": {
+        "imperial": 21.5917,
+        "metric": 34.7484
+      },
+      "overlay": {
+        "player": {
+          "firstName": {
+            "default": "Brent"
+          },
+          "lastName": {
+            "default": "Burns"
+          }
+        },
+        "gameDate": "2025-02-01",
+        "awayTeam": {
+          "abbrev": "LAK",
+          "score": 4
+        },
+        "homeTeam": {
+          "abbrev": "CAR",
+          "score": 2
+        },
+        "gameOutcome": {
+          "lastPeriodType": "REG"
+        },
+        "periodDescriptor": {
+          "maxRegulationPeriods": 3,
+          "number": 1,
+          "periodType": "REG"
+        },
+        "timeInPeriod": "14:35",
+        "gameType": 2
+      }
+    },
+    "burstsOver20": {
+      "value": 28,
+      "percentile": 0.6132,
+      "leagueAvg": {
+        "value": 29.3542
+      }
+    }
+  },
+  "totalDistanceSkated": {
+    "imperial": 245.6685,
+    "metric": 395.3458,
+    "percentile": 0.8931,
+    "leagueAvg": {
+      "imperial": 135.9015,
+      "metric": 218.7017
+    }
+  },
+  "distanceMaxGame": {
+    "imperial": 3.6285,
+    "metric": 5.8392,
+    "percentile": 0.695,
+    "leagueAvg": {
+      "imperial": 3.3061,
+      "metric": 5.3204
+    },
+    "overlay": {
+      "player": {
+        "firstName": {
+          "default": "Brent"
+        },
+        "lastName": {
+          "default": "Burns"
+        }
+      },
+      "gameDate": "2024-12-31",
+      "awayTeam": {
+        "abbrev": "CAR",
+        "score": 3
+      },
+      "homeTeam": {
+        "abbrev": "CBJ",
+        "score": 4
+      },
+      "gameOutcome": {
+        "lastPeriodType": "SO"
+      },
+      "periodDescriptor": {
+        "maxRegulationPeriods": 3,
+        "number": 2,
+        "periodType": "REG"
+      },
+      "gameType": 2
+    }
+  },
+  "sogSummary": [
+    {
+      "locationCode": "all",
+      "shots": 174,
+      "shotsPercentile": 0.9497,
+      "shotsLeagueAvg": 65.4107,
+      "goals": 6,
+      "goalsPercentile": 0.7736,
+      "goalsLeagueAvg": 3.5674,
+      "shootingPctg": 0.0345,
+      "shootingPctgPercentile": 0.1237,
+      "shootingPctgLeagueAvg": 0.0545
+    },
+    {
+      "locationCode": "high",
+      "shots": 3,
+      "shotsPercentile": 0.5597,
+      "shotsLeagueAvg": 3.5925,
+      "goals": 1,
+      "goalsPercentile": 0.6447,
+      "goalsLeagueAvg": 0.6144,
+      "shootingPctg": 0.3333,
+      "shootingPctgPercentile": 0.7938,
+      "shootingPctgLeagueAvg": 0.171
+    },
+    {
+      "locationCode": "long",
+      "shots": 111,
+      "shotsPercentile": 0.9874,
+      "shotsLeagueAvg": 34.3605,
+      "goals": 2,
+      "goalsPercentile": 0.6887,
+      "goalsLeagueAvg": 1.1567,
+      "shootingPctg": 0.018,
+      "shootingPctgPercentile": 0.2371,
+      "shootingPctgLeagueAvg": 0.0337
+    },
+    {
+      "locationCode": "mid",
+      "shots": 22,
+      "shotsPercentile": 0.805,
+      "shotsLeagueAvg": 12.5266,
+      "goals": 1,
+      "goalsPercentile": 0.4308,
+      "goalsLeagueAvg": 1.3511,
+      "shootingPctg": 0.0455,
+      "shootingPctgPercentile": 0.1443,
+      "shootingPctgLeagueAvg": 0.1079
+    }
+  ],
+  "sogDetails": [
+    {
+      "area": "Behind the Net",
+      "shots": 0,
+      "shotsPercentile": 0.0
+    },
+    {
+      "area": "Beyond Red Line",
+      "shots": 12,
+      "shotsPercentile": 0.9497
+    },
+    {
+      "area": "Center Point",
+      "shots": 34,
+      "shotsPercentile": 0.9214
+    },
+    {
+      "area": "Crease",
+      "shots": 1,
+      "shotsPercentile": 0.7579
+    },
+    {
+      "area": "High Slot",
+      "shots": 6,
+      "shotsPercentile": 0.7327
+    },
+    {
+      "area": "L Circle",
+      "shots": 12,
+      "shotsPercentile": 0.8931
+    },
+    {
+      "area": "L Corner",
+      "shots": 0,
+      "shotsPercentile": 0.0
+    },
+    {
+      "area": "L Net Side",
+      "shots": 0,
+      "shotsPercentile": 0.0
+    },
+    {
+      "area": "L Point",
+      "shots": 16,
+      "shotsPercentile": 0.7075
+    },
+    {
+      "area": "Low Slot",
+      "shots": 2,
+      "shotsPercentile": 0.4591
+    },
+    {
+      "area": "Offensive Neutral Zone",
+      "shots": 3,
+      "shotsPercentile": 0.8176
+    },
+    {
+      "area": "Outside L",
+      "shots": 1,
+      "shotsPercentile": 0.327
+    },
+    {
+      "area": "Outside R",
+      "shots": 19,
+      "shotsPercentile": 0.9686
+    },
+    {
+      "area": "R Circle",
+      "shots": 4,
+      "shotsPercentile": 0.6478
+    },
+    {
+      "area": "R Corner",
+      "shots": 0,
+      "shotsPercentile": 0.0
+    },
+    {
+      "area": "R Net Side",
+      "shots": 3,
+      "shotsPercentile": 0.9214
+    },
+    {
+      "area": "R Point",
+      "shots": 61,
+      "shotsPercentile": 0.9906
+    }
+  ],
+  "zoneTimeDetails": {
+    "offensiveZonePctg": 0.46133881,
+    "offensiveZonePercentile": 0.9613733905579,
+    "offensiveZoneLeagueAvg": 0.41878266,
+    "neutralZonePctg": 0.18345238,
+    "neutralZonePercentile": 0.7896995708155,
+    "neutralZoneLeagueAvg": 0.17862522,
+    "defensiveZonePctg": 0.35520881,
+    "defensiveZonePercentile": 0.9785407725322,
+    "defensiveZoneLeagueAvg": 0.40259211
+  }
+}

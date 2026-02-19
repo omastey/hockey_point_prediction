@@ -1,0 +1,11 @@
+player_id,name,games_played,shots,time_on_ice,goals,assists,points
+1,Player A,82,250,1300,30,40,70
+2,Player B,78,180,1200,25,35,60
+3,Player C,75,210,1100,28,32,60
+4,Player D,80,160,1150,20,25,45
+5,Player E,70,140,1000,18,22,40
+6,Player F,82,300,1500,40,50,90
+7,Player G,60,100,900,12,15,27
+8,Player H,82,220,1250,26,38,64
+9,Player I,76,190,1180,22,36,58
+10,Player J,68,130,980,15,20,35

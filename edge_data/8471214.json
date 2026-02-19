@@ -1,0 +1,373 @@
+{
+  "player": {
+    "id": 8471214,
+    "firstName": {
+      "default": "Alex",
+      "cs": "Alexandr",
+      "fi": "Aleksandr",
+      "sk": "Alexander"
+    },
+    "lastName": {
+      "default": "Ovechkin",
+      "cs": "Ove\u010dkin",
+      "fi": "Ovetshkin",
+      "sk": "Ove\u010dkin"
+    },
+    "birthDate": "1985-09-17",
+    "shootsCatches": "R",
+    "sweaterNumber": 8,
+    "position": "L",
+    "slug": "alex-ovechkin-8471214",
+    "headshot": "https://assets.nhle.com/mugs/nhl/20242025/WSH/8471214.png",
+    "goals": 44,
+    "assists": 29,
+    "points": 73,
+    "gamesPlayed": 65,
+    "team": {
+      "commonName": {
+        "default": "Capitals"
+      },
+      "placeNameWithPreposition": {
+        "default": "Washington",
+        "fr": "de Washington"
+      },
+      "abbrev": "WSH",
+      "teamLogo": {
+        "light": "https://assets.nhle.com/logos/nhl/svg/WSH_secondary_light.svg",
+        "dark": "https://assets.nhle.com/logos/nhl/svg/WSH_secondary_dark.svg"
+      }
+    }
+  },
+  "seasonsWithEdgeStats": [
+    {
+      "id": 20212022,
+      "gameTypes": [
+        2,
+        3
+      ]
+    },
+    {
+      "id": 20222023,
+      "gameTypes": [
+        2
+      ]
+    },
+    {
+      "id": 20232024,
+      "gameTypes": [
+        2,
+        3
+      ]
+    },
+    {
+      "id": 20242025,
+      "gameTypes": [
+        2,
+        3
+      ]
+    },
+    {
+      "id": 20252026,
+      "gameTypes": [
+        2
+      ]
+    }
+  ],
+  "topShotSpeed": {
+    "imperial": 98.96,
+    "metric": 159.2607,
+    "percentile": 0.9916,
+    "leagueAvg": {
+      "imperial": 83.9219,
+      "metric": 135.0592
+    },
+    "overlay": {
+      "player": {
+        "firstName": {
+          "default": "Alex",
+          "cs": "Alexandr",
+          "fi": "Aleksandr",
+          "sk": "Alexander"
+        },
+        "lastName": {
+          "default": "Ovechkin",
+          "cs": "Ove\u010dkin",
+          "fi": "Ovetshkin",
+          "sk": "Ove\u010dkin"
+        }
+      },
+      "gameDate": "2025-03-30",
+      "awayTeam": {
+        "abbrev": "BUF",
+        "score": 8
+      },
+      "homeTeam": {
+        "abbrev": "WSH",
+        "score": 5
+      },
+      "gameOutcome": {
+        "lastPeriodType": "REG"
+      },
+      "periodDescriptor": {
+        "maxRegulationPeriods": 3,
+        "number": 2,
+        "periodType": "REG"
+      },
+      "timeInPeriod": "16:40",
+      "gameType": 2
+    }
+  },
+  "skatingSpeed": {
+    "speedMax": {
+      "imperial": 21.985,
+      "metric": 35.381,
+      "percentile": 0.3767,
+      "leagueAvg": {
+        "imperial": 22.1829,
+        "metric": 35.6998
+      },
+      "overlay": {
+        "player": {
+          "firstName": {
+            "default": "Alex",
+            "cs": "Alexandr",
+            "fi": "Aleksandr",
+            "sk": "Alexander"
+          },
+          "lastName": {
+            "default": "Ovechkin",
+            "cs": "Ove\u010dkin",
+            "fi": "Ovetshkin",
+            "sk": "Ove\u010dkin"
+          }
+        },
+        "gameDate": "2024-11-02",
+        "awayTeam": {
+          "abbrev": "CBJ",
+          "score": 2
+        },
+        "homeTeam": {
+          "abbrev": "WSH",
+          "score": 7
+        },
+        "gameOutcome": {
+          "lastPeriodType": "REG"
+        },
+        "periodDescriptor": {
+          "maxRegulationPeriods": 3,
+          "number": 3,
+          "periodType": "REG"
+        },
+        "timeInPeriod": "04:38",
+        "gameType": 2
+      }
+    },
+    "burstsOver20": {
+      "value": 16,
+      "percentile": 0.225,
+      "leagueAvg": {
+        "value": 76.4559
+      }
+    }
+  },
+  "totalDistanceSkated": {
+    "imperial": 170.404,
+    "metric": 274.2253,
+    "percentile": 0.6033,
+    "leagueAvg": {
+      "imperial": 127.079,
+      "metric": 204.5038
+    }
+  },
+  "distanceMaxGame": {
+    "imperial": 3.2449,
+    "metric": 5.2218,
+    "percentile": 0.6533,
+    "leagueAvg": {
+      "imperial": 2.9007,
+      "metric": 4.668
+    },
+    "overlay": {
+      "player": {
+        "firstName": {
+          "default": "Alex",
+          "cs": "Alexandr",
+          "fi": "Aleksandr",
+          "sk": "Alexander"
+        },
+        "lastName": {
+          "default": "Ovechkin",
+          "cs": "Ove\u010dkin",
+          "fi": "Ovetshkin",
+          "sk": "Ove\u010dkin"
+        }
+      },
+      "gameDate": "2025-02-25",
+      "awayTeam": {
+        "abbrev": "CGY",
+        "score": 3
+      },
+      "homeTeam": {
+        "abbrev": "WSH",
+        "score": 1
+      },
+      "gameOutcome": {
+        "lastPeriodType": "REG"
+      },
+      "periodDescriptor": {
+        "maxRegulationPeriods": 3,
+        "number": 2,
+        "periodType": "REG"
+      },
+      "gameType": 2
+    }
+  },
+  "sogSummary": [
+    {
+      "locationCode": "all",
+      "shots": 237,
+      "shotsPercentile": 0.9617,
+      "shotsLeagueAvg": 88.7072,
+      "goals": 44,
+      "goalsPercentile": 0.995,
+      "goalsLeagueAvg": 11.2479,
+      "shootingPctg": 0.1857,
+      "shootingPctgPercentile": 0.9151,
+      "shootingPctgLeagueAvg": 0.1268
+    },
+    {
+      "locationCode": "high",
+      "shots": 40,
+      "shotsPercentile": 0.6533,
+      "shotsLeagueAvg": 30.3744,
+      "goals": 12,
+      "goalsPercentile": 0.8133,
+      "goalsLeagueAvg": 6.1215,
+      "shootingPctg": 0.3,
+      "shootingPctgPercentile": 0.9077,
+      "shootingPctgLeagueAvg": 0.2015
+    },
+    {
+      "locationCode": "long",
+      "shots": 42,
+      "shotsPercentile": 0.9933,
+      "shotsLeagueAvg": 8.7471,
+      "goals": 5,
+      "goalsPercentile": 1.0,
+      "goalsLeagueAvg": 0.3328,
+      "shootingPctg": 0.119,
+      "shootingPctgPercentile": 0.8708,
+      "shootingPctgLeagueAvg": 0.038
+    },
+    {
+      "locationCode": "mid",
+      "shots": 107,
+      "shotsPercentile": 0.9883,
+      "shotsLeagueAvg": 28.3211,
+      "goals": 16,
+      "goalsPercentile": 0.98,
+      "goalsLeagueAvg": 3.3527,
+      "shootingPctg": 0.1495,
+      "shootingPctgPercentile": 0.7159,
+      "shootingPctgLeagueAvg": 0.1184
+    }
+  ],
+  "sogDetails": [
+    {
+      "area": "Behind the Net",
+      "shots": 2,
+      "shotsPercentile": 0.82
+    },
+    {
+      "area": "Beyond Red Line",
+      "shots": 4,
+      "shotsPercentile": 0.81
+    },
+    {
+      "area": "Center Point",
+      "shots": 13,
+      "shotsPercentile": 0.9783
+    },
+    {
+      "area": "Crease",
+      "shots": 3,
+      "shotsPercentile": 0.46
+    },
+    {
+      "area": "High Slot",
+      "shots": 27,
+      "shotsPercentile": 0.945
+    },
+    {
+      "area": "L Circle",
+      "shots": 64,
+      "shotsPercentile": 1.0
+    },
+    {
+      "area": "L Corner",
+      "shots": 1,
+      "shotsPercentile": 0.875
+    },
+    {
+      "area": "L Net Side",
+      "shots": 5,
+      "shotsPercentile": 0.78
+    },
+    {
+      "area": "L Point",
+      "shots": 20,
+      "shotsPercentile": 0.9983
+    },
+    {
+      "area": "Low Slot",
+      "shots": 37,
+      "shotsPercentile": 0.68
+    },
+    {
+      "area": "Offensive Neutral Zone",
+      "shots": 7,
+      "shotsPercentile": 0.9217
+    },
+    {
+      "area": "Outside L",
+      "shots": 18,
+      "shotsPercentile": 0.96
+    },
+    {
+      "area": "Outside R",
+      "shots": 9,
+      "shotsPercentile": 0.78
+    },
+    {
+      "area": "R Circle",
+      "shots": 16,
+      "shotsPercentile": 0.78
+    },
+    {
+      "area": "R Corner",
+      "shots": 0,
+      "shotsPercentile": 0.0
+    },
+    {
+      "area": "R Net Side",
+      "shots": 2,
+      "shotsPercentile": 0.4633
+    },
+    {
+      "area": "R Point",
+      "shots": 9,
+      "shotsPercentile": 0.935
+    }
+  ],
+  "zoneTimeDetails": {
+    "offensiveZonePctg": 0.43909959,
+    "offensiveZonePercentile": 0.7481481481481,
+    "offensiveZoneLeagueAvg": 0.4234038,
+    "neutralZonePctg": 0.17414799,
+    "neutralZonePercentile": 0.2172839506173,
+    "neutralZoneLeagueAvg": 0.17830407,
+    "defensiveZonePctg": 0.38675242,
+    "defensiveZonePercentile": 0.6864197530864,
+    "defensiveZoneLeagueAvg": 0.39829213
+  }
+}
