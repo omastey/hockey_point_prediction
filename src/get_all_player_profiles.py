@@ -11,17 +11,15 @@ import requests
 BASE = "https://api-web.nhle.com/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-FEATURE_SEASON = 20232024  # for 23-24 season stats
+SEASONS = ["20202021", "20212022", "20222023", "20232024", "20242025"]
 GAME_TYPE = 2  # 2 = regular season
 
 MAX_WORKERS = 8
 REQUEST_SLEEP = 0.15
-MIN_GAMES_FILTER = 1
+MIN_GAMES_FILTER = 10
 
 OUTPUT_PATH = "edge_data/nhl_full_stats.parquet"
 
-# Optional: limit number of players fetched (for quick tests)
-# LIMIT = int(os.environ.get("PLAYER_LIMIT", "0"))
 LIMIT = 0  # Set to >0 to limit number of players (for testing)
 
 
@@ -54,75 +52,86 @@ def get_player_ids_from_rosters():
     team_abbrevs = {t["teamAbbrev"]["default"] for t in standings["standings"]}
 
     player_ids = set()
-    for team in team_abbrevs:
-        roster = safe_get(f"{BASE}/roster/{team}/{FEATURE_SEASON}")
-        if roster:
-            for group in roster.values():
-                if isinstance(group, list):
-                    for p in group:
-                        player_ids.add(p["id"])
-        time.sleep(0.1)
+    for season in SEASONS:
+        for team in team_abbrevs:
+            roster = safe_get(f"{BASE}/roster/{team}/{season}")
+            if roster:
+                for group in roster.values():
+                    if isinstance(group, list):
+                        for p in group:
+                            player_ids.add(p["id"])
+            time.sleep(0.1)
 
     return sorted(player_ids)
 
 
-def find_season_totals(data, season, game_type):
-    """Find NHL season totals entry for a given season and game type."""
-    for entry in data.get("seasonTotals", []):
-        if (
-            entry.get("season") == season
-            and entry.get("gameTypeId") == game_type
-            and entry.get("leagueAbbrev") == "NHL"
-        ):
-            return entry
-    return {}
-
-
 def extract_profile_features(data):
-    """Extract requested profile features for 23-24 and career."""
+    """Return one row per (player, season) with season stats and cumulative
+    career stats up to (but not including) that season."""
     player_id = data.get("playerId")
     first = (data.get("firstName", {}) or {}).get("default")
     last = (data.get("lastName", {}) or {}).get("default")
     full_name = " ".join([n for n in [first, last] if n]) or None
 
-    # 23-24 season totals (NHL regular season)
-    season_entry = find_season_totals(data, FEATURE_SEASON, GAME_TYPE)
+    # All NHL regular-season entries from the player's history
+    nhl_reg_totals = [
+        e for e in data.get("seasonTotals", [])
+        if e.get("gameTypeId") == GAME_TYPE and e.get("leagueAbbrev") == "NHL"
+    ]
 
-    # career totals (regular season)
-    career = data.get("careerTotals", {}).get("regularSeason", {})
+    rows = []
+    for season in SEASONS:
+        season_int = int(season)
 
-    row = {
-        "playerId": player_id,
-        "fullName": full_name,
+        # Season stats for this specific season
+        season_entry = next(
+            (e for e in nhl_reg_totals if e.get("season") == season_int), {}
+        )
 
-        # 23-24
-        "pp_goals_2324": season_entry.get("powerPlayGoals"),
-        "pp_points_2324": season_entry.get("powerPlayPoints"),
-        "toi_2324": season_entry.get("avgToi"),
-        "pp_toi_2324": season_entry.get("avgPowerPlayToi"),
-        "gamesPlayed_2324": season_entry.get("gamesPlayed"),
+        gp_this_season = season_entry.get("gamesPlayed", 0) or 0
+        if gp_this_season < MIN_GAMES_FILTER:
+            continue
 
-        # career (regular season)
-        "career_points": career.get("points"),
-        "career_games_played": career.get("gamesPlayed"),
-        "career_pp_points": career.get("powerPlayPoints"),
-        "career_pp_assists": career.get("powerPlayAssists"),
-        "career_pp_goals": career.get("powerPlayGoals"),
-        "career_shooting_pctg": career.get("shootingPctg"),
-    }
+        # Career stats = cumulative of all NHL regular seasons BEFORE this one
+        prior = [e for e in nhl_reg_totals if (e.get("season") or 0) < season_int]
 
-    return row
+        def _sum(field):
+            return sum(e.get(field) or 0 for e in prior)
+
+        career_goals = _sum("goals")
+        career_shots = _sum("shots")
+        career_shooting_pctg = (career_goals / career_shots * 100) if career_shots > 0 else None
+
+        row = {
+            "playerId": player_id,
+            "fullName": full_name,
+            "season": season,
+            "pp_goals": season_entry.get("powerPlayGoals"),
+            "pp_points": season_entry.get("powerPlayPoints"),
+            "toi": season_entry.get("avgToi"),
+            "pp_toi": season_entry.get("avgPowerPlayToi"),
+            "career_points": _sum("points"),
+            "career_games_played": _sum("gamesPlayed"),
+            "career_goals": career_goals,
+            "career_assists": _sum("assists"),
+            "career_pp_points": _sum("powerPlayPoints"),
+            "career_pp_goals": _sum("powerPlayGoals"),
+            "career_shooting_pctg": career_shooting_pctg,
+        }
+        rows.append(row)
+
+    return rows
 
 
 def fetch_player_profile(pid):
     url = f"{BASE}/player/{pid}/landing"
     data = safe_get(url)
     if not data:
-        return None
+        return []
 
-    row = extract_profile_features(data)
+    rows = extract_profile_features(data)
     time.sleep(REQUEST_SLEEP)
-    return row
+    return rows
 
 
 # =====================
@@ -142,18 +151,12 @@ rows = []
 with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
     futures = {executor.submit(fetch_player_profile, pid): pid for pid in player_ids}
     for i, future in enumerate(as_completed(futures), 1):
-        row = future.result()
-        if row:
-            rows.append(row)
+        result = future.result()
+        rows.extend(result)
         if i % 25 == 0:
             print(f"Processed {i}/{len(player_ids)} players")
 
-# Build DataFrame
 profile_df = pd.DataFrame(rows)
-
-# Filter to players with some games in 23-24 (optional)
-if "gamesPlayed_2324" in profile_df.columns:
-    profile_df = profile_df[profile_df["gamesPlayed_2324"].fillna(0) >= MIN_GAMES_FILTER]
 
 print(f"Final profile dataset size: {profile_df.shape}")
 

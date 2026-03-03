@@ -1,0 +1,104 @@
+================================================================================
+DATE: 2026-03-02
+PROMPT: "Please scan through the codebase and help me change the retreival of
+edge and all stats to allow for retreival of the last 5 years of player
+statistics. So the rows will now be something like Player | Season | All Season
+Stats | Career Stats up to that point in their careers. Don't implement yet
+just give me the steps"
+
+CHANGES: None — planning only. Produced a step-by-step implementation plan
+covering: defining a SEASONS list, renaming extract_features() to use generic
+column names, refactoring build_player_row() into build_player_rows() returning
+a list per player, rewriting get_all_player_profiles.py to compute cumulative
+career stats per season from seasonTotals, updating the merge join key to
+[playerId, season], updating features.py column names, and updating train_xgb.py
+to derive the target via a next-season PPG shift (Option A).
+================================================================================
+DATE: 2026-03-02
+PROMPT: "Lets go ahead with these updates and use option A for the predictive
+target"
+
+CHANGES:
+  src/get_all_edge_stats.py
+    - Replaced FEATURE_SEASON / TARGET_SEASON constants with SEASONS list
+      ["20202021", "20212022", "20222023", "20232024", "20242025"]
+    - Renamed extract_features() -> extract_season_stats(data, season); removed
+      all _2324-suffixed column names in favour of generic names (gamesPlayed,
+      goals, assists, points, ppg, gpg, apg, shots, team, age, etc.); added
+      season field; age now calculated relative to each season's year
+    - Removed extract_target() entirely
+    - Replaced build_player_row() with build_player_rows(pid) which loops all 5
+      seasons and returns a list of row dicts (one per season with >= 10 games)
+    - Roster fetching now loops all 5 seasons x all 32 teams to capture players
+      across the full 5-year window
+
+  src/get_all_player_profiles.py
+    - Rewrote extract_profile_features() to return a list of rows, one per
+      (player, season); career stats computed as cumulative sum of all
+      seasonTotals entries with season < current season (not all-time totals)
+    - New career columns: career_points, career_games_played, career_goals,
+      career_assists, career_pp_points, career_pp_goals, career_shooting_pctg
+    - Season-level columns now generic: pp_goals, pp_points, toi, pp_toi
+    - fetch_player_profile() now returns a list; main loop uses rows.extend()
+    - MIN_GAMES_FILTER raised from 1 to 10 to match EDGE stats
+    - get_player_ids_from_rosters() also loops all 5 seasons
+
+  src/data.py
+    - merge_parquet_datasets() gains join_on parameter (default ["playerId",
+      "season"]) replacing the hardcoded single-column "playerId" join
+
+  src/merge_datasets.py
+    - No code change; inherits new default join_on from data.py automatically
+
+  src/features.py
+    - Updated select_basic_features() column names to generic schema:
+      gamesPlayed, shots, toi, goals, assists; target changed from points to ppg
+
+  src/train_xgb.py
+    - toi column converted to seconds (was toi_2324)
+    - season encoded as integer season_year (e.g. "20232024" -> 2023)
+    - Target derived via df.groupby("playerId")["ppg"].shift(-1) ->
+      target_ppg_next; also derived target_points_next and target_gp_next
+    - Rows with no next season (last season per player) dropped before training
+    - drop_cols updated to use generic column names
+    - show_player_predictions() updated to include season column and new names
+    - All evaluation/output columns updated (Predicted_PPG_Next, etc.)
+================================================================================
+DATE: 2026-03-02
+PROMPT: "but it looks like the switched teams feature is getting removed with
+this edit, I'd like it to still be a part of the row for each player in all
+their respective seasons"
+
+CHANGES:
+  src/get_all_edge_stats.py
+    - Re-added switched_teams to build_player_rows(); computed by comparing
+      each season's team to the prior qualifying season's team within the
+      ordered rows list; first qualifying season for a player defaults to False
+================================================================================
+DATE: 2026-03-02
+PROMPT: "Ok, please add the delta features and shooting regression signals. Also
+please add a MD file which explains every feature we are using. Also, take a
+look at the output with XGBoost and tell me your insights from that: [XGBoost
+output provided]"
+
+CHANGES:
+  src/train_xgb.py
+    - Added delta feature computation (YoY change) for: toi, ppg, gpg, apg,
+      shots, pp_points, gamesPlayed, oz_pct, totalDistance, burstsOver20;
+      computed via groupby("playerId").shift(1) after sorting by (playerId,
+      season); NaN values (first season per player) filled to 0 at training time
+    - Added shooting_pct_vs_career: shootingPercentage minus career_shooting_pctg
+      — positive = lucky/above-career year (regression risk down), negative =
+      unlucky (recovery upside)
+    - Added ppg_vs_career_rate: current ppg minus career points/games rate —
+      positive = performing above career average (regression risk), negative =
+      performing below (recovery upside); null for rookies, filled to 0
+    - Moved sort_values([playerId, season]) to precede all shift operations
+
+  FEATURES.md (new file, project root)
+    - Created comprehensive feature reference documenting all columns grouped by
+      source: EDGE stats (basic, per-game rates, skating metrics, zone time,
+      shooting, encodings), profile stats (season PP stats, career cumulative),
+      engineered features (season encoding, YoY deltas, regression signals), and
+      the target variable
+================================================================================

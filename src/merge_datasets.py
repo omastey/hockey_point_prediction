@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from .data import merge_parquet_datasets
+try:
+    from .data import merge_parquet_datasets
+except ImportError:
+    from data import merge_parquet_datasets
 
 
 EDGE_PATH = "edge_data/nhl_edge_model_dataset.parquet"

@@ -14,31 +14,26 @@ except Exception as e:
     _USE_XGB = False
 
 
-
 def show_player_predictions(df, player_names,
                             player_col="fullName",
-                            actual_col="target_points_2425",
-                            pred_col="Predicted_Points_24_25"):
+                            actual_col="target_ppg_next",
+                            pred_col="Predicted_PPG_Next"):
     """
-    Lookup predicted vs actual points for player(s).
-    No model invocation required.
+    Lookup predicted vs actual PPG for player(s) across all their seasons.
     """
-
     if isinstance(player_names, str):
         player_names = [player_names]
 
     result = df[df[player_col].isin(player_names)][
-        [player_col, actual_col, pred_col, "Prediction_Error"]
-    ].sort_values(pred_col, ascending=False)
+        [player_col, "season", actual_col, pred_col, "Prediction_Error"]
+    ].sort_values([player_col, "season"])
 
     if result.empty:
         print("No matching players found.")
         return None
 
     print(result.to_string(index=False))
-
     return result
-
 
 
 # =====================
@@ -66,13 +61,54 @@ def toi_to_seconds(value):
             return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
     return np.nan
 
-if "toi_2324" in df.columns:
-    df["toi_2324"] = df["toi_2324"].apply(toi_to_seconds)
+if "toi" in df.columns:
+    df["toi"] = df["toi"].apply(toi_to_seconds)
+
+# Encode season as a numeric year (e.g. "20232024" -> 2023)
+if "season" in df.columns:
+    df["season_year"] = df["season"].astype(str).str[:4].astype(int)
+
+# Sort before any shift-based computations
+df = df.sort_values(["playerId", "season"]).reset_index(drop=True)
 
 # =====================
-# DEFINE TARGET (PPG instead of total points)
+# DELTA FEATURES (year-over-year changes)
 # =====================
-TARGET = "target_ppg_2425"
+delta_cols = [
+    "toi", "ppg", "gpg", "apg",
+    "shots", "pp_points", "gamesPlayed",
+    "oz_pct", "totalDistance", "burstsOver20",
+]
+prev_vals = df.groupby("playerId")[delta_cols].shift(1)
+for col in delta_cols:
+    df[f"delta_{col}"] = df[col] - prev_vals[col]
+
+# =====================
+# REGRESSION SIGNALS
+# =====================
+# How far above/below career shooting % is this season?
+# Positive = lucky year (regression risk down); Negative = unlucky (recovery upside)
+df["shooting_pct_vs_career"] = df["shootingPercentage"] - df["career_shooting_pctg"]
+
+# How far above/below the player's own career PPG rate is this season?
+# Positive = performing above career average (regression risk); Negative = below (recovery upside)
+career_ppg_rate = df["career_points"] / df["career_games_played"].replace(0, np.nan)
+df["ppg_vs_career_rate"] = df["ppg"] - career_ppg_rate
+
+# =====================
+# DERIVE TARGET (Option A: next season's PPG per player)
+# =====================
+
+df["target_ppg_next"] = df.groupby("playerId")["ppg"].shift(-1)
+df["target_points_next"] = df.groupby("playerId")["points"].shift(-1)
+df["target_gp_next"] = df.groupby("playerId")["gamesPlayed"].shift(-1)
+
+# Drop last-season rows (no future season to predict)
+df = df.dropna(subset=["target_ppg_next"]).reset_index(drop=True)
+
+TARGET = "target_ppg_next"
+
+print(f"Dataset shape after target derivation: {df.shape}")
 
 # =====================
 # DROP NON-FEATURE COLUMNS
@@ -80,30 +116,27 @@ TARGET = "target_ppg_2425"
 drop_cols = [
     "playerId",
     "fullName",
-    "position",     # already one-hot encoded
-    "shoots",       # already encoded
-    "team_2425",     # prevent leakage
-    "team_2324",
+    "position",         # already one-hot encoded
+    "shoots",           # already encoded
+    "team",             # prevent leakage / too many categories
+    "season",           # replaced by season_year
 
-    "target_points_2425",  # keep out of features
-    "target_ppg_2425",
-    "target_goals_2425",
-    "target_assists_2425",
-    "gp_2425",
+    "target_ppg_next",
+    "target_points_next",
+    "target_gp_next",
 
     # ADDING THIS FOR TESTING - MAY RE-ADD LATER
-    "points_2324",
-    "assists_2324",
-    "goals_2324",
+    "points",
+    "assists",
+    "goals",
 
-    # "ppg_2324",
-    # "apg_2324",
-    # "gpg_2324",
-    # "pp_points_2324",
+    # "ppg",
+    # "apg",
+    # "gpg",
+    # "pp_points",
 ]
 
-X = df.drop(columns=drop_cols + [TARGET])
-# X = X.select_dtypes(include=["number", "bool"])
+X = df.drop(columns=[c for c in drop_cols if c in df.columns] + [TARGET])
 y = df[TARGET]
 
 # Replace any remaining nulls
@@ -119,15 +152,6 @@ X_train, X_test, y_train, y_test = train_test_split(
 # =====================
 # MODEL
 # =====================
-# model = XGBRegressor(
-#     n_estimators=400,
-#     max_depth=4,
-#     learning_rate=0.05,
-#     subsample=0.8,
-#     colsample_bytree=0.8,
-#     random_state=42
-# )
-
 if _USE_XGB:
     model = XGBRegressor(
         n_estimators=800,
@@ -137,11 +161,10 @@ if _USE_XGB:
         colsample_bytree=0.7,
 
         reg_alpha=0.5,      # L1 regularization
-        reg_lambda=2,     # L2 regularization
+        reg_lambda=2,       # L2 regularization
 
         min_child_weight=3,
 
-        # objective="reg:squarederror",
         random_state=42,
     )
 else:
@@ -162,14 +185,10 @@ y_pred = model.predict(X_test)
 
 rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 
-
 train_preds = model.predict(X_train)
 
 train_r2 = r2_score(y_train, train_preds)
 r2 = r2_score(y_test, y_pred)
-
-
-
 
 print("Train R²:", train_r2)
 print("Test R²:", r2)
@@ -205,26 +224,24 @@ print("\nTop 15 Features:")
 print(importances.head(15))
 
 
-
-
-
-df["Predicted_PPG_24_25"] = model.predict(X)
-df["Predicted_Points_24_25"] = df["Predicted_PPG_24_25"] * df["gp_2425"].clip(lower=0)
-df["Prediction_Error"] = df["Predicted_PPG_24_25"] - df[TARGET]
+df["Predicted_PPG_Next"] = model.predict(X)
+df["Predicted_Points_Next"] = df["Predicted_PPG_Next"] * df["target_gp_next"].clip(lower=0)
+df["Prediction_Error"] = df["Predicted_PPG_Next"] - df[TARGET]
 df["Abs_Error"] = df["Prediction_Error"].abs()
-df["Points_Error"] = df["Predicted_Points_24_25"] - df["target_points_2425"]
+df["Points_Error"] = df["Predicted_Points_Next"] - df["target_points_next"]
 
 # Show best and worst predictions across the dataset, sorted by absolute error
 cols_to_show = [
     "fullName",
-    "target_ppg_2425",
-    "Predicted_PPG_24_25",
+    "season",
+    "target_ppg_next",
+    "Predicted_PPG_Next",
     "Prediction_Error",
     "Abs_Error",
-    "target_points_2425",
-    "Predicted_Points_24_25",
+    "target_points_next",
+    "Predicted_Points_Next",
     "Points_Error",
-    "gp_2425",
+    "target_gp_next",
 ]
 
 print("\nBest predictions (smallest absolute error):")
@@ -236,19 +253,8 @@ worst = df.sort_values("Abs_Error", ascending=False)[cols_to_show].head(10)
 print(worst.to_string(index=False))
 
 # Elias Pettersson predicted vs actual points
-print("\nElias Pettersson — Predicted vs Actual Points:")
-ep_cols = [
-    "fullName",
-    "target_ppg_2425",
-    "Predicted_PPG_24_25",
-    "Prediction_Error",
-    "Abs_Error",
-    "target_points_2425",
-    "Predicted_Points_24_25",
-    "Points_Error",
-    "gp_2425",
-]
-ep_row = df[df["fullName"] == "Elias Pettersson"][ep_cols]
+print("\nElias Pettersson — Predicted vs Actual PPG:")
+ep_row = df[df["fullName"] == "Elias Pettersson"][cols_to_show]
 if ep_row.empty:
     print("Elias Pettersson not found in dataset.")
 else:
@@ -261,5 +267,3 @@ importances.head(15).sort_values().plot(kind="barh")
 plt.title("Top 15 Feature Importances")
 plt.tight_layout()
 plt.show()
-
-

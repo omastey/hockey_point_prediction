@@ -18,12 +18,16 @@ def merge_parquet_datasets(
     profile_path: str,
     output_path: str,
     how: str = "inner",
+    join_on: list = None,
 ) -> pd.DataFrame:
-    """Merge EDGE and profile datasets on playerId and save as parquet."""
+    """Merge EDGE and profile datasets on join_on keys and save as parquet."""
+    if join_on is None:
+        join_on = ["playerId", "season"]
+
     edge_df = pd.read_parquet(edge_path)
     profile_df = pd.read_parquet(profile_path)
 
-    merged = edge_df.merge(profile_df, on="playerId", how=how, suffixes=("_edge", "_profile"))
+    merged = edge_df.merge(profile_df, on=join_on, how=how, suffixes=("_edge", "_profile"))
 
     # Resolve duplicate columns (e.g., fullName_edge/fullName_profile)
     if "fullName_edge" in merged.columns and "fullName_profile" in merged.columns:
