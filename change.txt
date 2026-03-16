@@ -102,3 +102,67 @@ CHANGES:
       engineered features (season encoding, YoY deltas, regression signals), and
       the target variable
 ================================================================================
+DATE: 2026-03-02
+PROMPT: "I'd like you to make the following changes: 1. Make the train values
+all seasons before 24-25 and test on 24-25. 2. Add MAE, bias check, error by
+position, error by player tier. For reducing ceiling/floor problem: add
+prev_career_high_ppg, age_squared or career-stage bucket. Fix best/worst
+prediction tables to filter to test-set rows only. Switch to temporal
+train/test split."
+
+CHANGES:
+  src/train_xgb.py
+    - Replaced random train/test split with temporal split: train on all seasons
+      < "20232024", test on "20232024" (predicting 24-25 performance); falls
+      back to "20222023" if 24-25 target data is unavailable
+    - Added mean_absolute_error import; evaluation section now reports RMSE,
+      MAE, Bias (mean prediction error with over/undershooting label), R², Train
+      R², and overfitting gap
+    - Added error by position breakdown (Forward vs Defenseman) with MAE, count,
+      and bias for each group on the test set
+    - Added error by player tier breakdown (High-tier vs Low-tier split on
+      median career PPG rate) with MAE, count, and bias for each tier
+    - Best/worst prediction tables now filtered to test set rows only
+    - Added career trajectory features: prev_career_high_ppg (rolling max of
+      prior seasons' PPG via expanding().max() after shift(1)), career_high_gap
+      (ppg - prev_career_high_ppg), age_squared (age²), career_stage (0=
+      developing ≤23, 1=prime ≤31, 2=declining 32+)
+    - Removed unused train_test_split import
+
+  FEATURES.md
+    - Added Career Trajectory Features section documenting prev_career_high_ppg,
+      career_high_gap, age_squared, and career_stage
+================================================================================
+DATE: 2026-03-04
+PROMPT: "Ok lets go back to the delta stats, why were they not working and how
+can we truly fix them to be effective features"
+
+ROOT CAUSE IDENTIFIED:
+  - The 20202021 season has zero rows in the EDGE dataset (API has no Edge
+    skating data for that season). The earliest available season is 20212022.
+  - In the training set (seasons < 20232024), players have at most 20212022 and
+    20222023. Since 20212022 is the first season for all players, those rows
+    have NaN deltas. Only ~50% of training rows (20222023) have valid deltas.
+  - Counting stat deltas (shots, pp_points, burstsOver20, totalDistance) were
+    computed on raw season totals, making them confounded with gamesPlayed
+    changes rather than true per-game performance changes.
+
+CHANGES:
+  src/train_xgb.py
+    - Converted counting stats to per-game rates before computing deltas:
+      shots_pg, pp_points_pg, bursts_pg, distance_pg
+    - Delta cols now split into rate_delta_cols (toi, ppg, gpg, apg, oz_pct —
+      already per-game rates) and count_delta_cols (the four new pg versions +
+      gamesPlayed). Old delta_shots, delta_pp_points, delta_burstsOver20,
+      delta_totalDistance removed in favour of per-game equivalents.
+    - Added has_prior_season binary flag (1 if player has a prior qualifying
+      season, 0 if first row) so tree models can learn to discount delta values
+      that were NaN-filled rather than genuine zero-change rows
+    - Added prev_season_gp (games played in prior season) as context for
+      interpreting delta magnitudes
+
+  FEATURES.md
+    - Updated delta features section to reflect per-game rate deltas
+    - Added Delta Context Features section documenting has_prior_season and
+      prev_season_gp
+================================================================================

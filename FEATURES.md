@@ -116,22 +116,45 @@ Features are computed from two NHL API sources merged on `(playerId, season)`.
 | `season_year` | Numeric encoding of the season start year (e.g. `"20232024"` → `2023`) |
 
 ### Year-Over-Year Delta Features
-*Each delta is `current_season_value − previous_qualifying_season_value`. Null for a player's
-first season in the dataset (filled to 0). Note: 20212022 deltas are noisy because the prior season
-(20202021) was a COVID-shortened 56-game season.*
+*Each delta is `current_season_value − previous_qualifying_season_value`. NaN for a player's
+first season in the dataset (left as NaN for XGBoost; filled to 0 for RandomForest).*
+*Counting stats are converted to per-game rates before differencing so that changes in
+games played (e.g. a short season vs a full season) do not inflate or deflate the delta.*
 
 | Feature | Based On | What It Captures |
 |---|---|---|
-| `delta_toi` | `toi` | Change in avg ice time per game — coach confidence signal |
+| `delta_toi` | `toi` (avg sec/game) | Change in avg ice time per game — coach confidence signal |
 | `delta_ppg` | `ppg` | Change in points-per-game rate — momentum in overall production |
 | `delta_gpg` | `gpg` | Change in goals-per-game rate |
 | `delta_apg` | `apg` | Change in assists-per-game rate |
-| `delta_shots` | `shots` | Change in total shot volume — offensive role / usage signal |
-| `delta_pp_points` | `pp_points` | Change in power play production — PP role change signal |
-| `delta_gamesPlayed` | `gamesPlayed` | Change in games played — health/availability trend |
 | `delta_oz_pct` | `oz_pct` | Change in offensive zone deployment — coaching usage shift |
-| `delta_totalDistance` | `totalDistance` | Change in total distance skated — workload/conditioning |
-| `delta_burstsOver20` | `burstsOver20` | Change in high-speed burst count — athleticism trend |
+| `delta_shots_pg` | `shots / gamesPlayed` | Change in shots per game — offensive role / usage signal |
+| `delta_pp_points_pg` | `pp_points / gamesPlayed` | Change in PP points per game — PP role change signal |
+| `delta_bursts_pg` | `burstsOver20 / gamesPlayed` | Change in high-speed bursts per game — athleticism trend |
+| `delta_distance_pg` | `totalDistance / gamesPlayed` | Change in distance skated per game — workload/conditioning |
+| `delta_gamesPlayed` | `gamesPlayed` | Change in games played — health/availability trend |
+
+### Delta Context Features
+
+| Feature | Description |
+|---|---|
+| `has_prior_season` | 1 if the player has a qualifying prior season in the dataset, 0 if this is their first row. Allows tree models to learn to discount delta values for first-season rows rather than treating NaN-filled-to-0 as a genuine zero-change signal. |
+| `prev_season_gp` | Games played in the prior qualifying season. Provides context for interpreting delta magnitudes — a +5 shot delta means something different if the player went from 20 games to 82 games vs staying at 82 games. |
+
+### Derived Rate Features
+
+| Feature | Formula | What It Captures |
+|---|---|---|
+| `dist_per_60` | `totalDistance / (toi / 3600)` | Miles skated per 60 minutes of ice time. Normalises total distance by TOI so a high-minute player isn't rewarded simply for playing more. A proxy for skating intensity and motor. |
+
+### Career Trajectory Features
+
+| Feature | Formula | What It Captures |
+|---|---|---|
+| `prev_career_high_ppg` | `max(ppg across all prior qualifying seasons)` | The player's personal best PPG entering this season. Null for the first season in dataset (filled to 0). |
+| `career_high_gap` | `ppg − prev_career_high_ppg` | How far above/below their own career best a player is performing. Positive = at or above career high (breakout or peak); Negative = in a slump or declining from prior peak. |
+| `age_squared` | `age²` | Captures the non-linear age curve — production tends to ramp up through the mid-20s and fall off more steeply after ~31. |
+| `career_stage` | `0 if age ≤ 23, 1 if age ≤ 31, 2 otherwise` | Discrete career stage bucket: 0 = developing, 1 = prime, 2 = declining. |
 
 ### Regression-to-Mean Signals
 
