@@ -4,6 +4,11 @@ import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
 
+try:
+    from .feature_engineering import engineer_features
+except ImportError:
+    from feature_engineering import engineer_features
+
 DISABLE_BASE_STATS = "--no-base-stats" in sys.argv
 
 # Try XGBoost first; fall back to RandomForest if unavailable (e.g., missing libomp on macOS)
@@ -37,154 +42,12 @@ def show_player_predictions(df, player_names,
 
 
 # =====================
-# LOAD DATA
+# LOAD DATA & ENGINEER FEATURES
 # =====================
 df = pd.read_parquet("edge_data/nhl_merged_dataset.parquet")
 print(f"Dataset shape: {df.shape}")
 
-# =====================
-# FEATURE PREPROCESSING
-# =====================
-def toi_to_seconds(value):
-    if pd.isna(value):
-        return np.nan
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        parts = value.split(":")
-        if len(parts) == 2:
-            minutes, seconds = parts
-            return int(minutes) * 60 + int(seconds)
-        if len(parts) == 3:
-            hours, minutes, seconds = parts
-            return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
-    return np.nan
-
-if "toi" in df.columns:
-    df["toi"] = df["toi"].apply(toi_to_seconds)
-
-# Encode season as a numeric year (e.g. "20232024" -> 2023)
-if "season" in df.columns:
-    df["season_year"] = df["season"].astype(str).str[:4].astype(int)
-
-# Sort before any shift-based computations
-df = df.sort_values(["playerId", "season"]).reset_index(drop=True)
-
-# Distance per 60 min of ice time (toi is already in seconds)
-df["dist_per_60"] = df["totalDistance"] / (df["toi"] / 3600).replace(0, np.nan)
-
-# =====================
-# TEAM CONTEXT FEATURES
-# Goal: describe the offensive environment the player will play in next season
-# without using next-season game results (no leakage).
-# =====================
-
-# --- Step A: Per-game rate stats (also reused by DELTA FEATURES below) ---
-gp = df["gamesPlayed"].replace(0, np.nan)
-df["shots_pg"]     = df["shots"]        / gp
-df["pp_points_pg"] = df["pp_points"]    / gp
-df["bursts_pg"]    = df["burstsOver20"] / gp
-df["distance_pg"]  = df["totalDistance"] / gp
-
-# --- Step B: Leave-one-out team environment averages ---
-# Subtract each player's own contribution before averaging so a star player's
-# stats don't dominate their own team context signal.
-team_totals = df.groupby(["team", "season"]).agg(
-    _sum_pp=("pp_points_pg", "sum"),
-    _sum_goals=("gpg", "sum"),
-    _sum_shots=("shots_pg", "sum"),
-    _count=("playerId", "count"),
-).reset_index()
-df = df.merge(team_totals, on=["team", "season"], how="left")
-df["team_pp_pts_pg"] = (df["_sum_pp"]    - df["pp_points_pg"]) / (df["_count"] - 1).clip(lower=1)
-df["team_goals_pg"]  = (df["_sum_goals"] - df["gpg"])          / (df["_count"] - 1).clip(lower=1)
-df["team_shots_pg"]  = (df["_sum_shots"] - df["shots_pg"])     / (df["_count"] - 1).clip(lower=1)
-df = df.drop(columns=["_sum_pp", "_sum_goals", "_sum_shots", "_count"])
-
-# --- Step C: Rolling 3-season team PP quality (more stable than single-season) ---
-team_pp_history = df.groupby(["team", "season"])["team_pp_pts_pg"].first().reset_index()
-team_pp_history = team_pp_history.sort_values(["team", "season"])
-team_pp_history["team_pp_pts_pg_3yr"] = (
-    team_pp_history.groupby("team")["team_pp_pts_pg"]
-    .transform(lambda x: x.rolling(3, min_periods=1).mean())
-)
-df = df.merge(team_pp_history[["team", "season", "team_pp_pts_pg_3yr"]], on=["team", "season"], how="left")
-
-# --- Step D: Attach destination team's current-season environment stats ---
-# Use next season's team + current season's stats for that team — no leakage.
-df["next_team"] = df.groupby("playerId")["team"].shift(-1)
-
-team_env_lookup = df.groupby(["team", "season"]).agg(
-    dest_team_pp_pts_pg=("team_pp_pts_pg", "first"),
-    dest_team_pp_3yr=("team_pp_pts_pg_3yr", "first"),
-    dest_team_goals_pg=("team_goals_pg", "first"),
-).reset_index().rename(columns={"team": "next_team"})
-df = df.merge(team_env_lookup, on=["next_team", "season"], how="left")
-
-# --- Step E: PP quality delta — destination team vs current team ---
-# Positive = moving to a better PP system (upside). Negative = worse (fall-off risk).
-# Near zero for players staying on the same team.
-df["team_pp_quality_delta"] = df["dest_team_pp_3yr"] - df["team_pp_pts_pg_3yr"]
-
-# --- Step F: switched_teams — use existing column if present, else compute ---
-if "switched_teams" not in df.columns:
-    df["switched_teams"] = (df["team"] != df["next_team"]).astype(int)
-
-# =====================
-# DELTA FEATURES (year-over-year changes)
-# =====================
-# shots_pg, pp_points_pg, bursts_pg, distance_pg already computed in Step A above.
-
-# Rate stats (already per-game or per-season-rate): delta directly
-# Counting stats: delta on the per-game version computed above
-rate_delta_cols  = ["toi", "ppg", "gpg", "apg", "oz_pct"]
-count_delta_cols = ["shots_pg", "pp_points_pg", "bursts_pg", "distance_pg", "gamesPlayed"]
-all_delta_cols   = rate_delta_cols + count_delta_cols
-
-prev_vals = df.groupby("playerId")[all_delta_cols].shift(1)
-for col in all_delta_cols:
-    df[f"delta_{col}"] = df[col] - prev_vals[col]
-
-# has_prior_season flag — 1 if player has a qualifying prior season in dataset,
-# 0 if this is their first row. Lets the model learn to discount delta values
-# that were filled from NaN (no prior data) vs genuine zero-change rows.
-df["has_prior_season"] = (~prev_vals["ppg"].isna()).astype(int)
-
-# How many games the player played last season (context for delta magnitude)
-df["prev_season_gp"] = df.groupby("playerId")["gamesPlayed"].shift(1)
-
-# =====================
-# CAREER TRAJECTORY FEATURES
-# =====================
-# Best PPG a player achieved in any prior qualifying season
-df["prev_career_high_ppg"] = df.groupby("playerId")["ppg"].transform(
-    lambda x: x.shift(1).expanding().max()
-)
-# How far above/below their career best is the player this season?
-# Positive = at or above career best (peak/breakout); Negative = in a slump or decline
-df["career_high_gap"] = df["ppg"] - df["prev_career_high_ppg"]
-
-# Age curve features
-df["age_squared"] = df["age"] ** 2
-
-def _career_stage(age):
-    if age <= 23: return 0   # developing
-    if age <= 31: return 1   # prime
-    return 2                 # declining
-
-df["career_stage"] = df["age"].apply(_career_stage)
-
-# =====================
-# REGRESSION SIGNALS
-# =====================
-# How far above/below career shooting % is this season?
-# Positive = lucky year (regression risk down); Negative = unlucky (recovery upside)
-df["shooting_pct_vs_career"] = df["shootingPercentage"] - df["career_shooting_pctg"]
-
-# How far above/below the player's own career PPG rate is this season?
-# Positive = performing above career average (regression risk); Negative = below (recovery upside)
-career_ppg_rate = df["career_points"] / df["career_games_played"].replace(0, np.nan)
-df["ppg_vs_career_rate"] = df["ppg"] - career_ppg_rate
+df = engineer_features(df, team_stats_path="edge_data/nhl_team_stats.parquet")
 
 # =====================
 # DERIVE TARGET (next season's PPG per player)
@@ -224,6 +87,7 @@ drop_cols = [
     "position",         # already one-hot encoded
     "shoots",           # already encoded
     "team",             # prevent leakage / too many categories
+    "next_team",        # helper column, environment captured in dest_team_* features
     "season",           # replaced by season_year
 
     "target_ppg_next",
@@ -234,7 +98,6 @@ drop_cols = [
     "shotsPercentile",
     "season_year",
     "totalDistance",
-    "next_team",        # helper column, environment captured in dest_team_* features
 ]
 
 # When --no-base-stats is passed, drop persistence stats so the model is forced
@@ -259,9 +122,7 @@ fill_zero_candidates = (
     [c for c in X.columns if c.startswith("career_")]
     + ["shooting_pct_vs_career", "ppg_vs_career_rate", "prev_career_high_ppg"]
 )
-# Deduplicate while preserving order (career_high_gap already caught by career_ prefix)
-seen = set()
-fill_zero_cols = [c for c in fill_zero_candidates if c in X.columns and not (seen.add(c) or c in seen)]
+fill_zero_cols   = [c for c in dict.fromkeys(fill_zero_candidates) if c in X.columns]
 delta_cols_in_X  = [c for c in X.columns if c.startswith("delta_")]
 other_cols       = [c for c in X.columns if c not in fill_zero_cols + delta_cols_in_X]
 
@@ -313,7 +174,6 @@ r2        = r2_score(y_test, y_pred)
 train_r2  = r2_score(y_train, train_preds)
 r2_gap    = train_r2 - r2
 
-r2_gap = train_r2 - r2
 if train_r2 >= 0.99 and r2 <= 0.80:
     fit_note = "Extreme overfitting"
 elif train_r2 >= 0.95 and r2 <= 0.80:
@@ -341,8 +201,8 @@ importances = pd.Series(
     index=X.columns
 ).sort_values(ascending=False)
 
-print("\nTop 15 Features:")
-print(importances.head)
+print("\nAll Features by Importance:")
+print(importances.to_string())
 
 # =====================
 # PREDICTIONS

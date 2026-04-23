@@ -6,15 +6,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # =====================
 # CONFIG
 # =====================
+try:
+    from .constants import SEASONS, GAME_TYPE, MIN_GAMES_FILTER
+except ImportError:
+    from constants import SEASONS, GAME_TYPE, MIN_GAMES_FILTER
+
 BASE = "https://api-web.nhle.com/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-SEASONS = ["20202021", "20212022", "20222023", "20232024", "20242025"]
-GAME_TYPE = 2
-
-MAX_WORKERS = 8          # Parallel requests
-REQUEST_SLEEP = 0.15     # Soft rate limit
-MIN_GAMES_FILTER = 10
+MAX_WORKERS = 8      # Parallel requests
+REQUEST_SLEEP = 0.15  # Soft rate limit
 
 # =====================
 # HELPERS

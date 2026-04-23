@@ -8,15 +8,16 @@ import requests
 # =====================
 # CONFIG
 # =====================
+try:
+    from .constants import SEASONS, GAME_TYPE, MIN_GAMES_FILTER
+except ImportError:
+    from constants import SEASONS, GAME_TYPE, MIN_GAMES_FILTER
+
 BASE = "https://api-web.nhle.com/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-SEASONS = ["20202021", "20212022", "20222023", "20232024", "20242025"]
-GAME_TYPE = 2  # 2 = regular season
-
 MAX_WORKERS = 8
 REQUEST_SLEEP = 0.15
-MIN_GAMES_FILTER = 10
 
 OUTPUT_PATH = "edge_data/nhl_full_stats.parquet"
 
@@ -73,6 +74,12 @@ def extract_profile_features(data):
     last = (data.get("lastName", {}) or {}).get("default")
     full_name = " ".join([n for n in [first, last] if n]) or None
 
+    # Draft details (static per player — same for every season row)
+    draft = data.get("draftDetails") or {}
+    draft_round = draft.get("round")
+    draft_overall_pick = draft.get("overallPick")
+    is_undrafted = 1 if not draft else 0
+
     # All NHL regular-season entries from the player's history
     nhl_reg_totals = [
         e for e in data.get("seasonTotals", [])
@@ -109,7 +116,9 @@ def extract_profile_features(data):
             "pp_goals": season_entry.get("powerPlayGoals"),
             "pp_points": season_entry.get("powerPlayPoints"),
             "toi": season_entry.get("avgToi"),
-            "pp_toi": season_entry.get("avgPowerPlayToi"),
+            "draft_round": draft_round,
+            "draft_overall_pick": draft_overall_pick,
+            "is_undrafted": is_undrafted,
             "career_points": _sum("points"),
             "career_games_played": _sum("gamesPlayed"),
             "career_goals": career_goals,
@@ -117,6 +126,7 @@ def extract_profile_features(data):
             "career_pp_points": _sum("powerPlayPoints"),
             "career_pp_goals": _sum("powerPlayGoals"),
             "career_shooting_pctg": career_shooting_pctg,
+            "years_in_nhl": len([e for e in prior if (e.get("gamesPlayed") or 0) >= MIN_GAMES_FILTER]),
         }
         rows.append(row)
 
