@@ -15,7 +15,7 @@ STATS_BASE = "https://api.nhle.com/stats/rest/en/team"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 REQUEST_SLEEP = 0.15
-OUTPUT_PATH = "edge_data/nhl_team_stats.parquet"
+OUTPUT_PATH = "data/nhl_team_stats.parquet"
 
 
 # =====================
@@ -87,6 +87,6 @@ for season in SEASONS:
 df = pd.DataFrame(rows)
 print(f"Team stats shape: {df.shape}")
 
-os.makedirs("edge_data", exist_ok=True)
+os.makedirs("data", exist_ok=True)
 df.to_parquet(OUTPUT_PATH, index=False)
 print(f"✅ Saved to {OUTPUT_PATH}")

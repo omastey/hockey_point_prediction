@@ -145,7 +145,7 @@ and `(team, season)` for team context stats.
 ---
 
 ## Engineered Features
-*Derived during training preprocessing in `train_xgb.py`.*
+*Derived in `feature_engineering.py`, shared by both `train_xgb.py` and `train_breakout.py`.*
 
 ### Intermediate Per-Game Rates
 *Computed from season totals; used directly as features and as inputs to delta calculations.*
@@ -196,7 +196,40 @@ games played (e.g. a short season vs a full season) do not inflate or deflate th
 | `prev_career_high_ppg` | `max(ppg across all prior qualifying seasons)` | The player's personal best PPG entering this season. Null for the first season in dataset (filled to 0). |
 | `career_high_gap` | `ppg − prev_career_high_ppg` | How far above/below their own career best a player is performing. Positive = at or above career high (breakout or peak); Negative = in a slump or declining from prior peak. |
 | `age_squared` | `age²` | Captures the non-linear age curve — production tends to ramp up through the mid-20s and fall off more steeply after ~31. |
-| `career_stage` | `0 if age ≤ 23, 1 if age ≤ 31, 2 otherwise` | Discrete career stage bucket: 0 = developing, 1 = prime, 2 = declining. |
+| `pct_of_career_high` | `ppg / prev_career_high_ppg` | How close the player is to their personal ceiling. Values near 1.0 mean the player is approaching a breakout threshold. Null for first season (filled to 0). |
+| `career_ppg_slope` | Linear regression slope of PPG across all career seasons | The trend direction of a player's production. Positive = improving trajectory, negative = declining. Null for players with only one season. |
+| `career_stage` | `0 if age ≤ 22, 1 if ≤ 26, 2 if ≤ 32, 3 otherwise` | Discrete career stage bucket: 0 = developing, 1 = entering prime, 2 = prime, 3 = declining. |
+
+### Breakout-Signal Features
+
+| Feature | Formula | What It Captures |
+|---|---|---|
+| `ppg_per_minute` | `ppg / (toi / 60)` | Scoring efficiency per minute of ice time. High efficiency + low TOI = upside if role expands. |
+| `age_x_delta_toi` | `age × delta_toi` | Interaction feature: young player getting increasing ice time is a classic breakout setup. |
+| `years_since_draft` | `age − 18` (drafted players only) | Approximation of years since draft. Late bloomers (4–5 years post-draft) have breakout potential. Null for undrafted players. |
+| `over_6ft` | `1 if height_in >= 72, 0 otherwise` | Binary size flag — larger players may have different breakout profiles. |
+| `ppg_league_percentile` | `rank(ppg) within season` | Where this player ranks league-wide. Elite players (99th pct) have no room to "break out" further. |
+| `ppg_x_career_high_gap` | `ppg × career_high_gap` | Separates elite players peaking (high PPG + positive gap = at ceiling) from emerging players (low PPG + positive gap = room to grow). |
+
+### Team Roster Depth Features
+*Computed from the player dataset itself by grouping on `(team, season)`.
+These measure a player's position within their team's depth chart and identify opportunity signals.*
+
+| Feature | Formula | What It Captures |
+|---|---|---|
+| `players_ahead_on_team` | Count of teammates with higher PPG | How deep in the lineup this player sits. Fewer players ahead = closer to top role. |
+| `pos_players_ahead` | Count of same-position teammates with higher PPG | Positional depth — a D-man with 0 defensemen ahead is about to be the #1. |
+| `team_top_player_age` | Age of the team's highest-PPG player | If the team's star is 32+, role inheritance opportunity for younger players. |
+| `team_pp_concentration` | Fraction of team PP points held by top 2 players | High concentration + aging top players = PP role about to open up. |
+| `player_pp_share` | `player_pp_points / team_total_pp_points` | Player's current share of team PP production — low share + young age = upside. |
+| `team_roster_turnover` | Fraction of prior season's roster that departed | High turnover = more ice time and roles available for remaining/new players. |
+
+### Position Interaction Features
+
+| Feature | Formula | What It Captures |
+|---|---|---|
+| `defenseman_x_delta_ppg` | `is_defenseman × delta_ppg` | Defenseman-specific PPG momentum — D-men break out differently than forwards. |
+| `defenseman_x_pp_points_pg` | `is_defenseman × pp_points_pg` | Defenseman PP involvement — a D-man getting PP time has high breakout potential. |
 
 ### Regression-to-Mean Signals
 
@@ -236,8 +269,48 @@ Supporting target columns (used for evaluation, not model input):
 |---|---|
 | `target_breakout` | Binary: 1 if the player's next season qualifies as a breakout, 0 otherwise. |
 
-A breakout requires **both** conditions to be met:
-1. `target_ppg_next > CAREER_HIGH_FACTOR × prev_career_high_ppg` — exceeds personal best by a factor (default 1.2)
+A breakout requires **all three** conditions to be met:
+1. `target_ppg_next > prev_career_high_ppg + CAREER_HIGH_MARGIN` — exceeds personal best by an additive margin (default 0.15)
 2. `target_ppg_next - ppg >= YOY_JUMP_THRESHOLD` — large year-over-year improvement (default 0.15)
+3. `target_ppg_next >= PPG_FLOOR` — minimum production threshold to filter noise (default 0.45, ~37 points over 82 games)
 
-Both thresholds are configurable via CLI: `--career-high-factor` and `--yoy-jump`.
+All thresholds are configurable via CLI: `--career-high-margin`, `--yoy-jump`, `--ppg-floor`.
+
+---
+
+## Future Feature Ideas
+*Features that could improve breakout prediction but require new data sources or additional research.*
+
+### Requires New Data Sources
+
+| Feature Idea | Data Source Needed | Why It Helps |
+|---|---|---|
+| Linemate quality (avg PPG of top linemates) | Line combination data (MoneyPuck, NaturalStatTrick, DailyFaceoff) | A player promoted to play with elite talent is primed to break out |
+| PP unit rank (PP1 vs PP2) | Detailed PP unit tracking | Moving onto PP1 is one of the biggest breakout catalysts |
+| Coaching changes | Manual tracking or external database | New coaches often promote different players and reshape lineups |
+| Individual expected goals (ixG) | Advanced stats providers (MoneyPuck, Evolving Hockey) | Underlying process metrics that lead PPG — high ixG + low goals = due for breakout |
+| Corsi/Fenwick shot attempt share | Advanced stats providers | Puck possession proxy — players on dominant possession teams outperform |
+| Prospect pipeline / org depth charts | Prospect ranking sites (EliteProspects, HockeyProspecting) | High-pedigree prospects blocked by veterans are primed for breakout when opportunity opens |
+
+### Archived Features (removed from breakout classifier)
+*These features are still computed and used by the regressor, but excluded from `train_breakout.py` to reduce noise. See `src/archived_features.py` for full rationale.*
+
+| Feature(s) | Reason Removed |
+|---|---|
+| `next_team_pp_pct`, `next_team_pp_goals_pg`, `next_team_pp_opps_pg`, `next_team_faceoff_pct`, `next_team_oz_faceoff_pct`, `next_team_dz_faceoff_pct` | Leakage-adjacent — next team unknown at prediction time |
+| `team_pp_pct`, `team_pp_goals_pg`, `team_pp_opps_pg`, `team_faceoff_pct`, `team_oz_faceoff_pct`, `team_dz_faceoff_pct` | Consistently low importance; player-level role features capture the signal better |
+| `height_in`, `weight_lb`, `over_6ft` | Consistently 0.0 importance across all iterations |
+| `has_prior_season`, `is_undrafted`, `is_center`, `is_winger`, `shoots_left`, `shoots_right` | Low-signal categoricals; `is_defenseman` kept via interaction features |
+| `speedMax`, `speedMax_pct`, `topShotSpeed`, `topShotSpeed_pct`, `delta_distance_pg`, `distance_pg` | Raw skating metrics showed low breakout importance; burst features kept |
+| `shootingPercentage`, `shootingPctgPercentile` | Regression signal (`shooting_pct_vs_career`) captures this better |
+| `career_points`, `career_goals`, `career_assists`, `career_games_played`, `career_pp_points`, `career_pp_goals`, `career_shooting_pctg` | Redundant with derived rate/trajectory features; counting stats add noise |
+| `defenseman_x_delta_ppg`, `years_since_draft`, `career_ppg_slope` | Unstable or zero importance across iterations |
+
+### Research / Modeling Ideas
+
+| Idea | Description |
+|---|---|
+| Position-specific breakout thresholds | Defensemen and forwards break out differently — separate definitions or models could improve accuracy |
+| Calibrated probability output | `CalibratedClassifierCV` to make predicted probabilities match actual breakout rates (requires more training data) |
+| Separate young vs prime-age models | Train two classifiers: one for career_stage 0-1, another for 2-3, since the breakout drivers are fundamentally different |
+| Next-season role prediction | Two-stage model: first predict TOI/PP role change, then use predicted role as input to breakout model |

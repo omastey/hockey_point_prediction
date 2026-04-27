@@ -13,26 +13,39 @@ def save_processed_csv(df: pd.DataFrame, path: str) -> None:
     df.to_csv(path, index=False)
 
 
+# Edge tracking columns that only exist from 2021-22 onward
+EDGE_ONLY_COLS = [
+    "topShotSpeed", "topShotSpeed_pct",
+    "speedMax", "speedMax_pct",
+    "burstsOver20", "totalDistance",
+    "oz_pct", "dz_pct",
+    "shotsPercentile", "shootingPctgPercentile",
+]
+
+
 def merge_parquet_datasets(
-    edge_path: str,
     profile_path: str,
+    edge_path: str,
     output_path: str,
-    how: str = "inner",
     join_on: list = None,
 ) -> pd.DataFrame:
-    """Merge EDGE and profile datasets on join_on keys and save as parquet."""
+    """Merge profile (primary) and EDGE datasets.
+
+    Profile is the primary dataset (all 16 seasons).
+    Edge tracking columns are left-joined (only available 2021-22+).
+    Pre-2021 rows will have NaN for edge columns.
+    """
     if join_on is None:
         join_on = ["playerId", "season"]
 
-    edge_df = pd.read_parquet(edge_path)
     profile_df = pd.read_parquet(profile_path)
+    edge_df = pd.read_parquet(edge_path)
 
-    merged = edge_df.merge(profile_df, on=join_on, how=how, suffixes=("_edge", "_profile"))
+    # Only keep edge-specific columns (not duplicated in profile)
+    edge_cols_to_join = [c for c in EDGE_ONLY_COLS if c in edge_df.columns]
+    edge_subset = edge_df[join_on + edge_cols_to_join].copy()
 
-    # Resolve duplicate columns (e.g., fullName_edge/fullName_profile)
-    if "fullName_edge" in merged.columns and "fullName_profile" in merged.columns:
-        merged["fullName"] = merged["fullName_edge"].fillna(merged["fullName_profile"])
-        merged = merged.drop(columns=["fullName_edge", "fullName_profile"])
+    merged = profile_df.merge(edge_subset, on=join_on, how="left")
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     merged.to_parquet(output_path, index=False)

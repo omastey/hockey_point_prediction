@@ -7,9 +7,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # CONFIG
 # =====================
 try:
-    from .constants import SEASONS, GAME_TYPE, MIN_GAMES_FILTER
+    from .constants import SEASONS, EDGE_SEASONS, GAME_TYPE, MIN_GAMES_FILTER
 except ImportError:
-    from constants import SEASONS, GAME_TYPE, MIN_GAMES_FILTER
+    from constants import SEASONS, EDGE_SEASONS, GAME_TYPE, MIN_GAMES_FILTER
 
 BASE = "https://api-web.nhle.com/v1"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -103,7 +103,7 @@ def build_player_rows(pid):
     switched_teams reflects whether the player changed teams vs the prior season.
     """
     rows = []
-    for season in SEASONS:
+    for season in EDGE_SEASONS:
         url = f"{BASE}/edge/skater-detail/{pid}/{season}/{GAME_TYPE}"
         data = safe_get(url)
         if not data:
@@ -129,12 +129,12 @@ standings = safe_get(f"{BASE}/standings/now")
 team_abbrevs = {t["teamAbbrev"]["default"] for t in standings["standings"]}
 
 # =====================
-# GET PLAYER IDS (from all seasons)
+# GET PLAYER IDS (from EDGE seasons only — no edge data before 2021-22)
 # =====================
-print("Fetching player IDs across all seasons...")
+print(f"Fetching player IDs across {len(EDGE_SEASONS)} edge seasons...")
 player_ids = set()
 
-for season in SEASONS:
+for season in EDGE_SEASONS:
     for team in team_abbrevs:
         roster = safe_get(f"{BASE}/roster/{team}/{season}")
         if roster:
@@ -145,7 +145,7 @@ for season in SEASONS:
         time.sleep(0.1)
 
 player_ids = sorted(player_ids)
-print(f"Found {len(player_ids)} unique players across {len(SEASONS)} seasons")
+print(f"Found {len(player_ids)} unique players across {len(EDGE_SEASONS)} edge seasons")
 
 # =====================
 # PARALLEL DATA COLLECTION
@@ -174,8 +174,8 @@ print(f"Final dataset size: {df.shape}")
 # SAVE PARQUET
 # =====================
 import os
-out_path = "edge_data/nhl_edge_model_dataset.parquet"
-os.makedirs("edge_data", exist_ok=True)
+out_path = "data/nhl_edge_model_dataset.parquet"
+os.makedirs("data", exist_ok=True)
 df.to_parquet(out_path, index=False)
 
 print(f"✅ Dataset saved to {out_path}")

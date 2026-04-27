@@ -8,19 +8,17 @@ except ImportError:
     from data import merge_parquet_datasets
 
 
-EDGE_PATH        = "edge_data/nhl_edge_model_dataset.parquet"
-PROFILE_PATH     = "edge_data/nhl_full_stats.parquet"
-TEAM_STATS_PATH  = "edge_data/nhl_team_stats.parquet"
-OUTPUT_PATH      = "edge_data/nhl_merged_dataset.parquet"
-MERGE_HOW = "inner"  # use "left" to keep all edge rows
+PROFILE_PATH     = "data/nhl_full_stats.parquet"
+EDGE_PATH        = "data/nhl_edge_model_dataset.parquet"
+TEAM_STATS_PATH  = "data/nhl_team_stats.parquet"
+OUTPUT_PATH      = "data/nhl_merged_dataset.parquet"
 
 
 def main() -> None:
     merged = merge_parquet_datasets(
-        edge_path=EDGE_PATH,
         profile_path=PROFILE_PATH,
+        edge_path=EDGE_PATH,
         output_path=OUTPUT_PATH,
-        how=MERGE_HOW,
     )
 
     team_stats = pd.read_parquet(TEAM_STATS_PATH)

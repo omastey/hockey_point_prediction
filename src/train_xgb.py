@@ -10,6 +10,7 @@ except ImportError:
     from feature_engineering import engineer_features
 
 DISABLE_BASE_STATS = "--no-base-stats" in sys.argv
+NO_PLOT = "--no-plot" in sys.argv
 
 # Try XGBoost first; fall back to RandomForest if unavailable (e.g., missing libomp on macOS)
 try:
@@ -44,10 +45,10 @@ def show_player_predictions(df, player_names,
 # =====================
 # LOAD DATA & ENGINEER FEATURES
 # =====================
-df = pd.read_parquet("edge_data/nhl_merged_dataset.parquet")
+df = pd.read_parquet("data/nhl_merged_dataset.parquet")
 print(f"Dataset shape: {df.shape}")
 
-df = engineer_features(df, team_stats_path="edge_data/nhl_team_stats.parquet")
+df = engineer_features(df, team_stats_path="data/nhl_team_stats.parquet")
 
 # =====================
 # DERIVE TARGET (next season's PPG per player)
@@ -71,7 +72,7 @@ print(f"Dataset shape after target derivation: {df.shape}")
 # =====================
 # Test on rows where season="20232024" — these predict 24-25 performance.
 # Fall back to "20222023" (predicting 23-24) if 24-25 target data is unavailable.
-TEST_SEASON = "20232024" if "20232024" in df["season"].values else "20222023"
+TEST_SEASON = "20242025" if "20242025" in df["season"].values else "20232024"
 train_mask = df["season"] < TEST_SEASON
 test_mask  = df["season"] == TEST_SEASON
 
@@ -279,8 +280,9 @@ for name in PLAYERS_TO_SHOW:
 # =====================
 # PLOT
 # =====================
-plt.figure(figsize=(10, 6))
-importances.head(15).sort_values().plot(kind="barh")
-plt.title("Top 15 Feature Importances")
-plt.tight_layout()
-plt.show()
+if not NO_PLOT:
+    plt.figure(figsize=(10, 6))
+    importances.head(15).sort_values().plot(kind="barh")
+    plt.title("Top 15 Feature Importances")
+    plt.tight_layout()
+    plt.show()
