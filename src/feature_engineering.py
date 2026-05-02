@@ -260,6 +260,14 @@ def engineer_features(df: pd.DataFrame, team_stats_path: str) -> pd.DataFrame:
 
     Call order matters — later steps depend on columns created by earlier ones.
     """
+    # Drop goalies — skater PPG models should not see them as trivially-zero rows
+    if "position" in df.columns:
+        n_before = len(df)
+        df = df[df["position"] != "G"].reset_index(drop=True)
+        n_dropped = n_before - len(df)
+        if n_dropped:
+            print(f"Dropped {n_dropped} goalie rows (position == 'G')")
+
     # TOI string → seconds
     if "toi" in df.columns:
         df["toi"] = df["toi"].apply(toi_to_seconds)

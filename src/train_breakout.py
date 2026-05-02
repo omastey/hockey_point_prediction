@@ -48,18 +48,26 @@ parser.add_argument("--ppg-floor", type=float, default=0.45,
                     help="Minimum PPG next season to qualify as breakout (default: 0.45)")
 parser.add_argument("--min-gp", type=int, default=40,
                     help="Minimum games played filter (default: 40)")
-parser.add_argument("--threshold", type=float, default=0.30,
-                    help="Classification probability threshold (default: 0.30, lower = more recall)")
+parser.add_argument("--threshold", type=float, default=0.40,
+                    help="Classification probability threshold (default: 0.40, lower = more recall, higher = more precision)")
 parser.add_argument("--model", type=str, default="xgb", choices=["xgb", "logistic"],
                     help="Model type: 'xgb' (XGBClassifier) or 'logistic' (LogisticRegression) (default: xgb)")
-parser.add_argument("--base-stats", action="store_true",
-                    help="Include raw counting/rate stats (excluded by default)")
+parser.add_argument("--no-base-stats", action="store_true",
+                    help="Exclude raw counting/rate stats (included by default)")
 parser.add_argument("--test-season", type=str, default="20242025",
                     help="Season to use as test set (default: 20242025)")
 parser.add_argument("--no-plot", action="store_true",
                     help="Skip plot generation (for headless/CI runs)")
 parser.add_argument("--tune", action="store_true",
                     help="Run time-series CV to find best C, l1_ratio, class_weight before training")
+parser.add_argument("--calibrate", type=str, default="none",
+                    choices=["none", "sigmoid", "isotonic"],
+                    help="Probability calibration method (XGB only). "
+                         "'sigmoid'=Platt scaling (robust, 2 params); 'isotonic'=non-parametric (more flexible). "
+                         "Calibrates on --calibration-season; trains on earlier seasons only.")
+parser.add_argument("--calibration-season", type=str, default="20232024",
+                    help="Season to use as calibration holdout (default: 20232024). "
+                         "Must be earlier than --test-season.")
 args = parser.parse_args()
 
 CAREER_HIGH_MARGIN = args.career_high_margin
@@ -173,9 +181,9 @@ ARCHIVED_FEATURES = [
 drop_cols += ARCHIVED_FEATURES
 
 BASE_STATS = ["ppg", "apg", "gpg", "pp_points", "points", "assists", "goals", "pp_goals", "gamesPlayed", "shots"]
-if not args.base_stats:
+if args.no_base_stats:
     drop_cols += BASE_STATS
-    print(f">> Excluding base stats (use --base-stats to include): {BASE_STATS}")
+    print(f">> --no-base-stats: excluding {BASE_STATS}")
 
 X = df.drop(columns=[c for c in drop_cols if c in df.columns] + [TARGET])
 y = df[TARGET]
@@ -242,21 +250,61 @@ if MODEL_TYPE == "logistic":
     model.fit(X_train_scaled, y_train)
 
 elif _USE_XGB:
-    model = XGBClassifier(
-        n_estimators=300,
-        learning_rate=0.08,
-        max_depth=4,
-        subsample=0.8,
-        colsample_bytree=0.7,
-        reg_alpha=0.5,
-        reg_lambda=2,
-        min_child_weight=3,
-        scale_pos_weight=scale_pos_weight,
-        eval_metric="aucpr",
-        random_state=42,
-    )
-    print(f"Model: XGBClassifier (max_depth=4, lr=0.08, n_est=300)")
-    model.fit(X_train, y_train)
+    def _build_xgb(spw):
+        return XGBClassifier(
+            n_estimators=300,
+            learning_rate=0.08,
+            max_depth=4,
+            subsample=0.8,
+            colsample_bytree=0.7,
+            reg_alpha=0.5,
+            reg_lambda=2,
+            min_child_weight=3,
+            scale_pos_weight=spw,
+            eval_metric="aucpr",
+            random_state=42,
+        )
+
+    if args.calibrate != "none":
+        from sklearn.calibration import CalibratedClassifierCV
+        from sklearn.frozen import FrozenEstimator
+
+        CALIB_SEASON = args.calibration_season
+        if CALIB_SEASON >= TEST_SEASON:
+            raise SystemExit(
+                f"--calibration-season ({CALIB_SEASON}) must be earlier than "
+                f"--test-season ({TEST_SEASON})."
+            )
+
+        fit_mask = train_mask & (df["season"] != CALIB_SEASON)
+        calib_mask = train_mask & (df["season"] == CALIB_SEASON)
+        X_fit, y_fit = X[fit_mask], y[fit_mask]
+        X_calib, y_calib = X[calib_mask], y[calib_mask]
+
+        if y_calib.sum() == 0:
+            raise SystemExit(
+                f"Calibration season {CALIB_SEASON} has no positive examples — "
+                f"pick a different --calibration-season."
+            )
+
+        # Recompute scale_pos_weight on the smaller fit set
+        spw_fit = (y_fit == 0).sum() / max((y_fit == 1).sum(), 1)
+
+        base = _build_xgb(spw_fit)
+        base.fit(X_fit, y_fit)
+        xgb_for_importance = base
+
+        # FrozenEstimator (sklearn 1.6+) replaces the old cv="prefit" pattern
+        model = CalibratedClassifierCV(FrozenEstimator(base), method=args.calibrate)
+        model.fit(X_calib, y_calib)
+        print(f"Model: CalibratedClassifierCV(XGB, method={args.calibrate}) "
+              f"— fit on {fit_mask.sum()} rows ({y_fit.sum()} pos), "
+              f"calibrated on {calib_mask.sum()} rows ({y_calib.sum()} pos) from season {CALIB_SEASON}")
+    else:
+        model = _build_xgb(scale_pos_weight)
+        xgb_for_importance = model
+        print(f"Model: XGBClassifier (max_depth=4, lr=0.08, n_est=300)")
+        model.fit(X_train, y_train)
 
 else:
     print("XGBoost unavailable, using RandomForestClassifier")
@@ -299,8 +347,8 @@ if y_test.sum() > 0:
 
     # Threshold sweep — shows recall/precision tradeoff at different cutoffs
     print(f"\nThreshold Sweep (test set):")
-    print(f"  {'Thresh':>6}  {'Prec':>5}  {'Recall':>6}  {'F1':>5}  {'TP':>3}  {'FP':>3}  {'FN':>3}")
-    for t in [0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50]:
+    print(f"  {'Thresh':>6}  {'Prec':>5}  {'Recall':>6}  {'F1':>5}  {'F0.5':>5}  {'TP':>3}  {'FP':>3}  {'FN':>3}")
+    for t in [0.10, 0.20, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.70]:
         preds_t = (y_prob >= t).astype(int)
         cm_t = confusion_matrix(y_test, preds_t)
         tp = cm_t[1, 1] if cm_t.shape[0] > 1 else 0
@@ -309,7 +357,24 @@ if y_test.sum() > 0:
         prec = tp / (tp + fp) if (tp + fp) > 0 else 0
         rec = tp / (tp + fn) if (tp + fn) > 0 else 0
         f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0
-        print(f"  {t:>6.2f}  {prec:>5.2f}  {rec:>6.2f}  {f1:>5.2f}  {tp:>3}  {fp:>3}  {fn:>3}")
+        # F0.5 weights precision 2x more than recall
+        f05 = 1.25 * prec * rec / (0.25 * prec + rec) if (0.25 * prec + rec) > 0 else 0
+        print(f"  {t:>6.2f}  {prec:>5.2f}  {rec:>6.2f}  {f1:>5.2f}  {f05:>5.2f}  {tp:>3}  {fp:>3}  {fn:>3}")
+
+    # Precision@k and Lift@k — measures top-of-list quality
+    # P@k = fraction of top k predictions that are actual breakouts
+    # Lift@k = P@k / base_rate (how much better than random)
+    base_rate = y_test.sum() / len(y_test)
+    sorted_idx = np.argsort(y_prob)[::-1]
+    print(f"\nPrecision@k (ranked by predicted probability):")
+    print(f"  Base rate: {base_rate:.3f} ({y_test.sum()}/{len(y_test)} actual breakouts)")
+    print(f"  {'k':>3}  {'P@k':>5}  {'Lift':>5}  {'TP@k':>4}")
+    for k in [5, 10, 15, 20, 30]:
+        top_k_targets = y_test.iloc[sorted_idx[:k]]
+        tp_at_k = int(top_k_targets.sum())
+        p_at_k = tp_at_k / k
+        lift_at_k = p_at_k / base_rate if base_rate > 0 else 0
+        print(f"  {k:>3}  {p_at_k:>5.2f}  {lift_at_k:>5.2f}  {tp_at_k:>4}")
 else:
     print("\nNo breakout examples in test set — cannot compute AUC metrics.")
 
@@ -325,8 +390,10 @@ if MODEL_TYPE == "logistic":
     n_nonzero = (coefs != 0).sum()
     print(f"\nL1 selected {n_nonzero}/{len(coefs)} features (zeroed out {len(coefs) - n_nonzero})")
 else:
+    # CalibratedClassifierCV wraps the base XGB; pull importances from the prefit base.
+    importance_source = xgb_for_importance if "xgb_for_importance" in dir() else model
     importances = pd.Series(
-        model.feature_importances_,
+        importance_source.feature_importances_,
         index=X.columns
     ).sort_values(ascending=False)
     print("\nAll Features by Importance:")

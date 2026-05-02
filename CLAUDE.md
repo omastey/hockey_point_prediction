@@ -75,8 +75,8 @@ python -m src.train_xgb --no-plot
 - `--yoy-jump 0.15` — min PPG increase year-over-year
 - `--ppg-floor 0.45` — min PPG next season
 - `--min-gp 40` — min games played filter
-- `--threshold 0.30` — classification probability threshold
-- `--base-stats` — include raw counting stats (excluded by default)
+- `--threshold 0.40` — classification probability threshold (default 0.40, raise for more precision)
+- `--no-base-stats` — exclude raw counting stats (included by default)
 - `--tune` — run time-series CV before training
 - `--no-plot` — skip plot generation
 
