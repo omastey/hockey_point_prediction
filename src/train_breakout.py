@@ -72,6 +72,11 @@ parser.add_argument("--calibrate", type=str, default="none",
 parser.add_argument("--calibration-season", type=str, default="20232024",
                     help="Season to use as calibration holdout (default: 20232024). "
                          "Must be earlier than --test-season.")
+parser.add_argument("--cv", action="store_true",
+                    help="Rolling-origin CV: train/predict each season in --cv-test-seasons "
+                         "and pool predictions for stable metrics. Overrides --test-season.")
+parser.add_argument("--cv-test-seasons", type=str, default="20222023,20232024,20242025",
+                    help="Comma-separated test seasons for --cv (default: last 3).")
 args = parser.parse_args()
 
 CAREER_HIGH_MARGIN = args.career_high_margin
@@ -125,12 +130,9 @@ print(f"Breakout rate: {n_breakout}/{n_total} ({n_breakout/n_total*100:.1f}%)")
 # TEMPORAL TRAIN / TEST SPLIT
 # =====================
 TEST_SEASON = args.test_season
+# train_mask is used early by tune_logistic; per-fold splits are computed in the run section below.
 train_mask = df["season"] < TEST_SEASON
 test_mask  = df["season"] == TEST_SEASON
-
-print(f"Temporal split — Train: {train_mask.sum()} rows, Test: {test_mask.sum()} rows")
-print(f"  Train breakouts: {df.loc[train_mask, TARGET].sum()}, "
-      f"Test breakouts: {df.loc[test_mask, TARGET].sum()}")
 
 # =====================
 # DROP NON-FEATURE COLUMNS
@@ -205,22 +207,9 @@ X[fill_zero_cols] = X[fill_zero_cols].fillna(0)
 X[delta_cols_in_X] = X[delta_cols_in_X].fillna(0)
 X[other_cols]     = X[other_cols].fillna(0)
 
-X_train = X[train_mask]
-X_test  = X[test_mask]
-y_train = y[train_mask]
-y_test  = y[test_mask]
-
-# =====================
-# MODEL
-# =====================
-n_neg = (y_train == 0).sum()
-n_pos = (y_train == 1).sum()
-scale_pos_weight = n_neg / n_pos if n_pos > 0 else 1.0
-print(f"Class balance — negative: {n_neg}, positive: {n_pos}, scale_pos_weight: {scale_pos_weight:.1f}")
-
 MODEL_TYPE = args.model
 
-# Tuning or defaults
+# Logistic hyperparameters (CV-tunable via --tune)
 LOGISTIC_C = 0.5
 LOGISTIC_L1_RATIO = 0.7
 LOGISTIC_CLASS_WEIGHT = {0: 1, 1: 5}
@@ -231,107 +220,195 @@ if args.tune and MODEL_TYPE == "logistic":
     LOGISTIC_L1_RATIO = best["l1_ratio"]
     LOGISTIC_CLASS_WEIGHT = best["class_weight"]
 
-if MODEL_TYPE == "logistic":
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.preprocessing import StandardScaler
 
-    # Logistic regression needs scaled features
-    scaler = StandardScaler()
-    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
-    X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns, index=X_test.index)
-
-    model = LogisticRegression(
-        penalty="elasticnet",
-        solver="saga",
-        l1_ratio=LOGISTIC_L1_RATIO,
-        C=LOGISTIC_C,
-        class_weight=LOGISTIC_CLASS_WEIGHT,
-        max_iter=5000,
+def _build_xgb(spw):
+    return XGBClassifier(
+        n_estimators=300,
+        learning_rate=0.08,
+        max_depth=4,
+        subsample=0.8,
+        colsample_bytree=0.7,
+        reg_alpha=0.5,
+        reg_lambda=2,
+        min_child_weight=3,
+        scale_pos_weight=spw,
+        eval_metric="aucpr",
         random_state=42,
     )
-    cw_str = f"{LOGISTIC_CLASS_WEIGHT[1]}:1"
-    print(f"Model: LogisticRegression (ElasticNet, l1_ratio={LOGISTIC_L1_RATIO}, C={LOGISTIC_C}, class_weight {cw_str})")
-    model.fit(X_train_scaled, y_train)
 
-elif _USE_XGB:
-    def _build_xgb(spw):
-        return XGBClassifier(
-            n_estimators=300,
-            learning_rate=0.08,
-            max_depth=4,
-            subsample=0.8,
-            colsample_bytree=0.7,
-            reg_alpha=0.5,
-            reg_lambda=2,
-            min_child_weight=3,
-            scale_pos_weight=spw,
-            eval_metric="aucpr",
-            random_state=42,
+
+def _prior_season(season: str) -> str:
+    """20242025 -> 20232024."""
+    start = int(season[:4]) - 1
+    return f"{start}{start + 1}"
+
+
+def fit_one_fold(X, y, df, train_mask, test_mask, calibration_season=None):
+    """Fit a model on train_mask, predict on test_mask. Returns (y_prob, importances, model)."""
+    X_train, y_train = X[train_mask], y[train_mask]
+    X_test = X[test_mask]
+    n_neg = (y_train == 0).sum()
+    n_pos = (y_train == 1).sum()
+    spw = n_neg / n_pos if n_pos > 0 else 1.0
+
+    if MODEL_TYPE == "logistic":
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.preprocessing import StandardScaler
+
+        scaler = StandardScaler()
+        X_train_s = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
+        X_test_s = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns, index=X_test.index)
+
+        model = LogisticRegression(
+            penalty="elasticnet", solver="saga",
+            l1_ratio=LOGISTIC_L1_RATIO, C=LOGISTIC_C,
+            class_weight=LOGISTIC_CLASS_WEIGHT,
+            max_iter=5000, random_state=42,
         )
+        model.fit(X_train_s, y_train)
+        y_prob = model.predict_proba(X_test_s)[:, 1]
+        importances = pd.Series(model.coef_[0], index=X.columns)
+        return y_prob, importances, model
 
-    if args.calibrate != "none":
+    if not _USE_XGB:
+        model = RandomForestClassifier(
+            n_estimators=500, max_depth=8, class_weight="balanced",
+            random_state=42, n_jobs=-1,
+        )
+        model.fit(X_train, y_train)
+        y_prob = model.predict_proba(X_test)[:, 1]
+        importances = pd.Series(model.feature_importances_, index=X.columns)
+        return y_prob, importances, model
+
+    if args.calibrate != "none" and calibration_season is not None:
         from sklearn.calibration import CalibratedClassifierCV
         from sklearn.frozen import FrozenEstimator
 
-        CALIB_SEASON = args.calibration_season
-        if CALIB_SEASON >= TEST_SEASON:
-            raise SystemExit(
-                f"--calibration-season ({CALIB_SEASON}) must be earlier than "
-                f"--test-season ({TEST_SEASON})."
-            )
-
-        fit_mask = train_mask & (df["season"] != CALIB_SEASON)
-        calib_mask = train_mask & (df["season"] == CALIB_SEASON)
+        fit_mask = train_mask & (df["season"] != calibration_season)
+        calib_mask = train_mask & (df["season"] == calibration_season)
         X_fit, y_fit = X[fit_mask], y[fit_mask]
         X_calib, y_calib = X[calib_mask], y[calib_mask]
 
         if y_calib.sum() == 0:
             raise SystemExit(
-                f"Calibration season {CALIB_SEASON} has no positive examples — "
-                f"pick a different --calibration-season."
+                f"Calibration season {calibration_season} has no positive examples."
             )
 
-        # Recompute scale_pos_weight on the smaller fit set
         spw_fit = (y_fit == 0).sum() / max((y_fit == 1).sum(), 1)
-
         base = _build_xgb(spw_fit)
         base.fit(X_fit, y_fit)
-        xgb_for_importance = base
-
-        # FrozenEstimator (sklearn 1.6+) replaces the old cv="prefit" pattern
         model = CalibratedClassifierCV(FrozenEstimator(base), method=args.calibrate)
         model.fit(X_calib, y_calib)
-        print(f"Model: CalibratedClassifierCV(XGB, method={args.calibrate}) "
-              f"— fit on {fit_mask.sum()} rows ({y_fit.sum()} pos), "
-              f"calibrated on {calib_mask.sum()} rows ({y_calib.sum()} pos) from season {CALIB_SEASON}")
-    else:
-        model = _build_xgb(scale_pos_weight)
-        xgb_for_importance = model
-        print(f"Model: XGBClassifier (max_depth=4, lr=0.08, n_est=300)")
-        model.fit(X_train, y_train)
+        y_prob = model.predict_proba(X_test)[:, 1]
+        importances = pd.Series(base.feature_importances_, index=X.columns)
+        return y_prob, importances, model
 
-else:
-    print("XGBoost unavailable, using RandomForestClassifier")
-    model = RandomForestClassifier(
-        n_estimators=500,
-        max_depth=8,
-        class_weight="balanced",
-        random_state=42,
-        n_jobs=-1,
-    )
+    model = _build_xgb(spw)
     model.fit(X_train, y_train)
+    y_prob = model.predict_proba(X_test)[:, 1]
+    importances = pd.Series(model.feature_importances_, index=X.columns)
+    return y_prob, importances, model
+
 
 # =====================
-# EVALUATION
+# RUN: SINGLE-SEASON or CV
 # =====================
-if MODEL_TYPE == "logistic":
-    y_prob = model.predict_proba(X_test_scaled)[:, 1]
+if args.cv:
+    fold_seasons = [s.strip() for s in args.cv_test_seasons.split(",") if s.strip()]
+    print(f"\n>> Rolling-origin CV across {len(fold_seasons)} folds: {fold_seasons}")
+
+    all_y_test = []
+    all_y_prob = []
+    all_importances = []
+    fold_summaries = []
+    last_fold_test_mask = None
+
+    for fold_test_season in fold_seasons:
+        fold_train_mask = df["season"] < fold_test_season
+        fold_test_mask = df["season"] == fold_test_season
+        if fold_test_mask.sum() == 0:
+            print(f"  [skip] season {fold_test_season} has no rows")
+            continue
+
+        calib_season = _prior_season(fold_test_season) if args.calibrate != "none" else None
+        n_pos_fold = y[fold_train_mask].sum()
+        spw_fold = (y[fold_train_mask] == 0).sum() / max(n_pos_fold, 1)
+
+        print(f"\n  Fold test={fold_test_season}: train rows={fold_train_mask.sum()} "
+              f"(pos={n_pos_fold}, spw={spw_fold:.1f}), test rows={fold_test_mask.sum()} "
+              f"(pos={y[fold_test_mask].sum()})"
+              + (f", calib={calib_season}" if calib_season else ""))
+
+        y_prob_fold, importances_fold, _ = fit_one_fold(
+            X, y, df, fold_train_mask, fold_test_mask, calibration_season=calib_season,
+        )
+        y_test_fold = y[fold_test_mask].values
+
+        fold_ap = average_precision_score(y_test_fold, y_prob_fold) if y_test_fold.sum() else float("nan")
+        fold_roc = roc_auc_score(y_test_fold, y_prob_fold) if y_test_fold.sum() else float("nan")
+        fold_brier = float(np.mean((y_prob_fold - y_test_fold) ** 2))
+        fold_summaries.append({
+            "season": fold_test_season, "n_test": int(fold_test_mask.sum()),
+            "n_pos": int(y_test_fold.sum()), "ap": fold_ap, "roc": fold_roc, "brier": fold_brier,
+        })
+
+        all_y_test.append(y_test_fold)
+        all_y_prob.append(y_prob_fold)
+        all_importances.append(importances_fold)
+        # Save the last fold's per-row probabilities back onto df for the predictions table.
+        df.loc[df.index[fold_test_mask], "_fold_prob"] = y_prob_fold
+        last_fold_test_mask = fold_test_mask
+
+    # Pool predictions across folds
+    y_test = pd.Series(np.concatenate(all_y_test))
+    y_prob = np.concatenate(all_y_prob)
+    importances = pd.concat(all_importances, axis=1).mean(axis=1)
+
+    print("\n  Per-fold metrics:")
+    print(f"    {'Season':>10}  {'N':>4}  {'Pos':>3}  {'AP':>5}  {'ROC':>5}  {'Brier':>6}")
+    for s in fold_summaries:
+        print(f"    {s['season']:>10}  {s['n_test']:>4}  {s['n_pos']:>3}  {s['ap']:>5.3f}  "
+              f"{s['roc']:>5.3f}  {s['brier']:>6.3f}")
+
+    # For the predicted-breakouts table at the end, use the last fold (most recent season).
+    test_mask = last_fold_test_mask
+    y_pred = (y_prob >= THRESHOLD).astype(int)
 else:
-    y_prob = model.predict_proba(X_test)[:, 1]
-y_pred = (y_prob >= THRESHOLD).astype(int)
+    train_mask = df["season"] < TEST_SEASON
+    test_mask = df["season"] == TEST_SEASON
+    print(f"Temporal split — Train: {train_mask.sum()} rows, Test: {test_mask.sum()} rows")
+    print(f"  Train breakouts: {df.loc[train_mask, TARGET].sum()}, "
+          f"Test breakouts: {df.loc[test_mask, TARGET].sum()}")
+
+    n_neg = (y[train_mask] == 0).sum()
+    n_pos = (y[train_mask] == 1).sum()
+    scale_pos_weight = n_neg / n_pos if n_pos > 0 else 1.0
+    print(f"Class balance — negative: {n_neg}, positive: {n_pos}, scale_pos_weight: {scale_pos_weight:.1f}")
+
+    if MODEL_TYPE == "logistic":
+        cw_str = f"{LOGISTIC_CLASS_WEIGHT[1]}:1"
+        print(f"Model: LogisticRegression (ElasticNet, l1_ratio={LOGISTIC_L1_RATIO}, C={LOGISTIC_C}, class_weight {cw_str})")
+    elif _USE_XGB and args.calibrate == "none":
+        print("Model: XGBClassifier (max_depth=4, lr=0.08, n_est=300)")
+    elif _USE_XGB:
+        print(f"Model: CalibratedClassifierCV(XGB, method={args.calibrate}) calibrated on {args.calibration_season}")
+
+    calib_season = args.calibration_season if args.calibrate != "none" else None
+    if calib_season is not None and calib_season >= TEST_SEASON:
+        raise SystemExit(
+            f"--calibration-season ({calib_season}) must be earlier than --test-season ({TEST_SEASON})."
+        )
+
+    y_prob, importances, model = fit_one_fold(
+        X, y, df, train_mask, test_mask, calibration_season=calib_season,
+    )
+    y_test = y[test_mask]
+    y_pred = (y_prob >= THRESHOLD).astype(int)
+    df.loc[df.index[test_mask], "_fold_prob"] = y_prob
 
 print("\n===== BREAKOUT CLASSIFIER PERFORMANCE =====")
-print(f"\nClassification Report (test set, season {TEST_SEASON}, threshold={THRESHOLD}):")
+eval_label = f"pooled across folds {args.cv_test_seasons}" if args.cv else f"season {TEST_SEASON}"
+print(f"\nClassification Report ({eval_label}, threshold={THRESHOLD}):")
 print(classification_report(y_test, y_pred, target_names=["No Breakout", "Breakout"], zero_division=0))
 
 print("Confusion Matrix:")
@@ -385,40 +462,31 @@ else:
 # =====================
 # FEATURE IMPORTANCE
 # =====================
+imp_label = "averaged across folds" if args.cv else "single fold"
 if MODEL_TYPE == "logistic":
-    # Logistic regression: show coefficients (absolute value = importance, sign = direction)
-    coefs = pd.Series(model.coef_[0], index=X.columns)
-    importances = coefs.abs().sort_values(ascending=False)
-    print("\nFeature Coefficients (logistic regression, sorted by |coef|):")
-    print(coefs.reindex(importances.index).to_string(float_format="{:.4f}".format))
-    n_nonzero = (coefs != 0).sum()
-    print(f"\nL1 selected {n_nonzero}/{len(coefs)} features (zeroed out {len(coefs) - n_nonzero})")
+    coefs = importances  # signed coefficients
+    ranked = coefs.abs().sort_values(ascending=False)
+    print(f"\nFeature Coefficients (logistic, {imp_label}, sorted by |coef|):")
+    print(coefs.reindex(ranked.index).to_string(float_format="{:.4f}".format))
+    n_nonzero = (coefs.abs() > 1e-10).sum()
+    print(f"\nNon-zero coefficients: {n_nonzero}/{len(coefs)} (zeroed out {len(coefs) - n_nonzero})")
 else:
-    # CalibratedClassifierCV wraps the base XGB; pull importances from the prefit base.
-    importance_source = xgb_for_importance if "xgb_for_importance" in dir() else model
-    importances = pd.Series(
-        importance_source.feature_importances_,
-        index=X.columns
-    ).sort_values(ascending=False)
-    print("\nAll Features by Importance:")
-    print(importances.to_string())
+    ranked = importances.sort_values(ascending=False)
+    print(f"\nAll Features by Importance ({imp_label}):")
+    print(ranked.to_string())
 
 # =====================
 # PREDICTIONS — BREAKOUT CANDIDATES
 # =====================
-if MODEL_TYPE == "logistic":
-    X_all_scaled = pd.DataFrame(scaler.transform(X), columns=X.columns, index=X.index)
-    df["breakout_prob"] = model.predict_proba(X_all_scaled)[:, 1]
-else:
-    df["breakout_prob"] = model.predict_proba(X)[:, 1]
+# Use per-fold predictions stored in df["_fold_prob"]. Covers single-season and CV.
+df["breakout_prob"] = df["_fold_prob"]
 df["breakout_pred"] = (df["breakout_prob"] >= THRESHOLD).astype(int)
 
-# Compute current and next season total points for display
 df["current_points"] = (df["ppg"] * df["gamesPlayed"]).round(0).astype(int)
 df["next_points"] = (df["target_ppg_next"] * df["target_gp_next"]).round(0).astype(int)
 df["points_jump"] = df["next_points"] - df["current_points"]
 
-test_df = df[test_mask].copy()
+test_df = df[df["_fold_prob"].notna()].copy()
 
 cols_to_show = [
     "fullName",
@@ -435,14 +503,12 @@ cols_to_show = [
     "career_stage",
 ]
 
-# All players the model predicted as breakout
 predicted_breakouts = test_df[test_df["breakout_pred"] == 1].copy()
-print(f"\nAll predicted breakouts — test set (season {TEST_SEASON}, prob >= {THRESHOLD}):")
+print(f"\nAll predicted breakouts — {eval_label} (prob >= {THRESHOLD}):")
 print(f"  {len(predicted_breakouts)} predicted, "
       f"{predicted_breakouts['target_breakout'].sum()} actual breakouts among them")
 print(predicted_breakouts.sort_values("breakout_prob", ascending=False)[cols_to_show].to_string(index=False))
 
-# Show actual breakouts in test set
 actual_breakouts = test_df[test_df["target_breakout"] == 1]
 if not actual_breakouts.empty:
     print(f"\nActual breakouts in test set ({len(actual_breakouts)} players):")
@@ -468,7 +534,7 @@ if not args.no_plot or args.save_plot:
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     # Feature importance / coefficients
-    importances.head(15).sort_values().plot(kind="barh", ax=axes[0])
+    ranked.head(15).sort_values().plot(kind="barh", ax=axes[0])
     title_suffix = "Coefficients" if MODEL_TYPE == "logistic" else "Importances"
     axes[0].set_title(f"Top 15 Feature {title_suffix} — Breakout Classifier")
 

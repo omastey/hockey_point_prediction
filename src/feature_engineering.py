@@ -252,6 +252,32 @@ def compute_roster_depth_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # =====================
+# MONEYPUCK FEATURES
+# =====================
+
+def compute_moneypuck_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Engineered features from MoneyPuck raw columns. Skips silently if MP cols absent."""
+    if "mp_xg_flurry" not in df.columns:
+        return df
+
+    icetime_h = (df["mp_icetime"] / 3600).replace(0, np.nan)
+
+    # Puck-luck residual: actual goals minus expected goals.
+    # Negative => unlucky shooter, candidate for upward regression.
+    df["xg_luck"] = df["goals"] - df["mp_xg_flurry"]
+
+    # Offensive-zone deployment share — coach trust signal.
+    starts_total = (df["mp_oz_starts"] + df["mp_dz_starts"]).replace(0, np.nan)
+    df["oz_start_pct"] = df["mp_oz_starts"] / starts_total
+
+    # Per-60 rates — strip out ice-time effects.
+    df["xg_per_60"] = df["mp_xg_flurry"] / icetime_h
+    df["xg_high_danger_per_60"] = df["mp_xg_high_danger"] / icetime_h
+
+    return df
+
+
+# =====================
 # ORCHESTRATOR
 # =====================
 
@@ -296,6 +322,9 @@ def engineer_features(df: pd.DataFrame, team_stats_path: str) -> pd.DataFrame:
 
     # Team roster depth & position interactions
     df = compute_roster_depth_features(df)
+
+    # MoneyPuck-derived features (xg_luck, oz_start_pct, xg_per_60, xg_high_danger_per_60)
+    df = compute_moneypuck_features(df)
 
     # Physical features
     df["over_6ft"] = (df["height_in"] >= 72).astype(int)

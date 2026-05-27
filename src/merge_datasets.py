@@ -11,6 +11,7 @@ except ImportError:
 PROFILE_PATH     = "data/nhl_full_stats.parquet"
 EDGE_PATH        = "data/nhl_edge_model_dataset.parquet"
 TEAM_STATS_PATH  = "data/nhl_team_stats.parquet"
+MONEYPUCK_PATH   = "data/nhl_moneypuck_skaters.parquet"
 OUTPUT_PATH      = "data/nhl_merged_dataset.parquet"
 
 
@@ -23,6 +24,10 @@ def main() -> None:
 
     team_stats = pd.read_parquet(TEAM_STATS_PATH)
     merged = merged.merge(team_stats, on=["team", "season"], how="left")
+
+    if Path(MONEYPUCK_PATH).exists():
+        mp = pd.read_parquet(MONEYPUCK_PATH).drop(columns=["mp_gp"], errors="ignore")
+        merged = merged.merge(mp, on=["playerId", "season"], how="left")
 
     Path(OUTPUT_PATH).parent.mkdir(parents=True, exist_ok=True)
     merged.to_parquet(OUTPUT_PATH, index=False)
