@@ -238,6 +238,16 @@ These measure a player's position within their team's depth chart and identify o
 | `shooting_pct_vs_career` | `shootingPercentage − career_shooting_pctg` | How far above/below a player's own career shooting % they performed this season. Positive = lucky year, likely to regress down. Negative = unlucky year, likely to recover. |
 | `ppg_vs_career_rate` | `ppg − (career_points / career_games_played)` | How far above/below a player's own career PPG rate they are this season. Positive = above career average (regression risk). Negative = below career average (recovery upside). Null for rookies with no prior career data (filled to 0). |
 
+### MoneyPuck-Derived Features
+*Engineered from joined MoneyPuck columns (`mp_*`). Computed in `compute_moneypuck_features()`. Pre-2008 rows have NaN.*
+
+| Feature | Formula | What It Captures |
+|---|---|---|
+| `xg_luck` | `goals − mp_xg_flurry` | Goals scored above/below expected. Negative = unlucky shooter due for upward regression — the canonical breakout signal. More principled than `shooting_pct_vs_career` because xG controls for shot quality, not just career-average %. |
+| `oz_start_pct` | `mp_oz_starts / (mp_oz_starts + mp_dz_starts)` | Fraction of non-neutral shift starts that began in the offensive zone. Pure deployment signal — coaches give OZ starts to players they trust offensively. New signal not captured anywhere else. |
+| `xg_per_60` | `mp_xg_flurry / (mp_icetime / 3600)` | Expected goals per 60 minutes of ice time. Strips out role/usage so a 4th-liner is comparable to a 1st-liner. Leading indicator (xG → goals next year), where `ppg_per_minute` is lagging. |
+| `xg_high_danger_per_60` | `mp_xg_high_danger / (mp_icetime / 3600)` | Per-60 expected goals from the slot/net-front area only. Filters out perimeter volume — distinguishes real chance creators from point-shot defensemen. |
+
 ---
 
 ## Notes

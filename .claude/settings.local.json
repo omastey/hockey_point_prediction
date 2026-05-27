@@ -3,7 +3,18 @@
     "allow": [
       "WebFetch(domain:api-web.nhle.com)",
       "Bash(python3:*)",
-      "Bash(source:*)"
+      "Bash(source:*)",
+      "Bash(awk -F',' 'NR>1{print $6}' skaters.csv)",
+      "Bash(awk -F',' 'NR>1{print $2}' skaters_2008_to_2024.csv)",
+      "Bash(awk -F',' 'NR>1{print $1\",\"$3}' skaters.csv)",
+      "Bash(awk -F',' '$1==\"8483515\"' skaters.csv)",
+      "Bash(xxd)",
+      "Bash(awk -F',' 'NR>1 && $6==\"all\"{print $1\",\"$3}' skaters.csv)",
+      "Bash(awk -F',' 'NR>1 && $6==\"all\" && \\($1==\"8478402\" || $1==\"8477956\" || $1==\"8480039\" || $1==\"8480829\" || $1==\"8475799\" || $1==\"8473419\"\\){print $1\",\"$3\",\"$4}' skaters.csv)",
+      "Bash(awk -F',' 'NR>1 && $1==\"8478402\"{print $1,$2,$6}' skaters.csv)",
+      "Bash(awk -F',' 'NR>1 && $6==\"all\"' skaters.csv)",
+      "Bash(awk -F',' 'NR>1 && $6==\"all\"' skaters_2008_to_2024.csv)",
+      "Bash(awk -F',' '{print NF}')"
     ]
   }
 }
