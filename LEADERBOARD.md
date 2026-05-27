@@ -1,5 +1,18 @@
 # Breakout Classifier — Run Leaderboard
 
+## TL;DR — Best Models
+
+| Best by | Run | Model | ROC-AUC | Avg Prec | Recall | Notes |
+|---|---|---|---|---|---|---|
+| **Discrimination (AP)** | **#14** | Logistic (ElasticNet, no base stats) | **0.902** | **0.411** | 0.81 | Best AP yet, clean coefficients, no opposite-sign collinearity. |
+| **Calibration (Brier)** | **#19** | XGB + Sigmoid calibration | 0.883 | 0.298 | 0.25 | Brier 0.028; tighter top-K precision (P@10 = 40%). |
+| **Recall**              | **#18** | Logistic (goalies filtered, base stats) | 0.894 | 0.343 | **0.88** | Catches 14/16 actual breakouts. |
+
+Run #14 (logistic, ElasticNet, no base stats) is the current production recommendation.
+See full run details below for what was tried, what worked, and what regressed.
+
+---
+
 Test set: season noted per run | Threshold: 0.30 (unless noted)
 
 | # | Model | Key Changes | TP | FP | FN | Prec | Recall | ROC-AUC | Avg Prec | Brier | Notes |
