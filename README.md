@@ -170,9 +170,3 @@ scripts/                      One-off debug utilities
 | [`HYPERPARAMETERS.md`](HYPERPARAMETERS.md) | Hyperparameter tuning runs, CV configurations, calibration experiments |
 | [`LEADERBOARD.md`](LEADERBOARD.md) | Chronological log of 20+ model experiments — what was tried, what worked, what regressed |
 | [`.claude/CLAUDE.md`](.claude/CLAUDE.md) | Developer workflow notes (data pipeline commands, conventions for adding features) |
-
----
-
-## License
-
-MIT — see [`LICENSE`](LICENSE).
