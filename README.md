@@ -169,4 +169,5 @@ scripts/                      One-off debug utilities
 | [`FEATURES.md`](FEATURES.md) | All 80+ features grouped by source (Landing / Edge / Team / Derived), with formulas and rationale |
 | [`HYPERPARAMETERS.md`](HYPERPARAMETERS.md) | Hyperparameter tuning runs, CV configurations, calibration experiments |
 | [`LEADERBOARD_BREAKOUT.md`](LEADERBOARD_BREAKOUT.md) | Chronological log of 20+ breakout-classifier experiments — what was tried, what worked, what regressed |
+| [`LEADERBOARD_PPG.md`](LEADERBOARD_PPG.md) | PPG regressor runs (currently one tracked baseline + prior code-history context) |
 | [`.claude/CLAUDE.md`](.claude/CLAUDE.md) | Developer workflow notes (data pipeline commands, conventions for adding features) |
