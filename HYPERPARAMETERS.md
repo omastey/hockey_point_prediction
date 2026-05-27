@@ -74,7 +74,7 @@ XGBClassifier(
 | `random_state` | 42 | Reproducibility. |
 
 ### Decision threshold
-- Default: **0.40** (raised from 0.30 in April 2026 to prioritize precision over recall — see `LEADERBOARD.md` and the precision@k discussion).
+- Default: **0.40** (raised from 0.30 in April 2026 to prioritize precision over recall — see `LEADERBOARD_BREAKOUT.md` and the precision@k discussion).
 - Configurable via `--threshold`. Threshold sweep is printed every run from 0.10 to 0.70.
 - **When `--calibrate sigmoid` is used, the threshold scale shifts** — calibrated probabilities are typically much smaller (e.g. uncalibrated 0.40 ≈ calibrated 0.10). Reach for the threshold sweep + Precision@k output to pick a threshold on the calibrated scale.
 
@@ -148,7 +148,7 @@ Hyperparameters can be re-tuned via time-series cross-validation:
 python -m src.train_breakout --model logistic --tune
 ```
 
-This calls `tune_logistic()` in `src/tuning.py`, which does expanding-window CV across the last 4 training seasons and grid-searches over `(C, l1_ratio, class_weight)`. There is **no XGB tuning path yet** — adding one is on the roadmap (see LEADERBOARD comments).
+This calls `tune_logistic()` in `src/tuning.py`, which does expanding-window CV across the last 4 training seasons and grid-searches over `(C, l1_ratio, class_weight)`. There is **no XGB tuning path yet** — adding one is on the roadmap (see LEADERBOARD_BREAKOUT comments).
 
 ---
 

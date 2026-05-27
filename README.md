@@ -38,7 +38,7 @@ Defensemen MAE: 0.098 · Forwards MAE: 0.111 — model handles both positions cl
 
 ![PPG regressor — top 15 feature importances](assets/regressor_feature_importance.png)
 
-See [`LEADERBOARD.md`](LEADERBOARD.md) for the full run history (20+ experiments) and [`HYPERPARAMETERS.md`](HYPERPARAMETERS.md) for tuning details.
+See [`LEADERBOARD_BREAKOUT.md`](LEADERBOARD_BREAKOUT.md) for the full run history (20+ experiments) and [`HYPERPARAMETERS.md`](HYPERPARAMETERS.md) for tuning details.
 
 ---
 
@@ -168,5 +168,5 @@ scripts/                      One-off debug utilities
 |---|---|
 | [`FEATURES.md`](FEATURES.md) | All 80+ features grouped by source (Landing / Edge / Team / Derived), with formulas and rationale |
 | [`HYPERPARAMETERS.md`](HYPERPARAMETERS.md) | Hyperparameter tuning runs, CV configurations, calibration experiments |
-| [`LEADERBOARD.md`](LEADERBOARD.md) | Chronological log of 20+ model experiments — what was tried, what worked, what regressed |
+| [`LEADERBOARD_BREAKOUT.md`](LEADERBOARD_BREAKOUT.md) | Chronological log of 20+ breakout-classifier experiments — what was tried, what worked, what regressed |
 | [`.claude/CLAUDE.md`](.claude/CLAUDE.md) | Developer workflow notes (data pipeline commands, conventions for adding features) |

@@ -89,7 +89,7 @@ python -m src.train_xgb --no-plot
 
 ### When running a new model experiment:
 1. Run the model and note the results
-2. Add a row to `LEADERBOARD.md` with: run #, model type, key changes, TP/FP/FN, precision, recall, ROC-AUC, avg precision, brier score, and notes
+2. Add a row to `LEADERBOARD_BREAKOUT.md` with: run #, model type, key changes, TP/FP/FN, precision, recall, ROC-AUC, avg precision, brier score, and notes
 
 ### Data architecture:
 - **Profile dataset is primary** (all 16 seasons, 2010-2026)
