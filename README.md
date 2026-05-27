@@ -1,9 +1,9 @@
 # NHL Player Performance Prediction
 
-End-to-end ML pipeline that pulls 16 seasons of NHL data from three public APIs, engineers 80+ player and team features, and trains two models:
+End-to-end ML pipeline that pulls 16 seasons of NHL data from four data sources — three NHL APIs plus MoneyPuck's xG-based shot quality dataset — engineers 80+ player and team features, and trains two models:
 
 - **PPG Regressor** (XGBoost) — predicts a skater's points-per-game next season
-- **Breakout Classifier** (Logistic Regression w/ ElasticNet) — flags players poised for a career-best leap
+- **Breakout Classifier** (XGBoost, with optional Logistic / ElasticNet variant) — flags players poised for a career-best leap
 
 Built to be reproducible from a fresh clone: data is committed, training runs in under a minute on a laptop.
 
@@ -11,20 +11,22 @@ Built to be reproducible from a fresh clone: data is committed, training runs in
 
 ## Headline Results
 
-Evaluated on the **2024–25 NHL season** (468 player-seasons), trained on all prior seasons back to 2010–11.
+Evaluated on the **2024–25 NHL season** (468 player-seasons), trained on all prior seasons back to 2010–11. The breakout classifier is also validated by **rolling-origin cross-validation** across the last 3 seasons (1,428 player-seasons, 54 breakouts) to confirm that single-season metrics aren't overfit.
 
-### Breakout Classifier — Run 14 (current best)
-| Metric | Value |
-|---|---|
-| ROC-AUC | **0.902** |
-| Average Precision | **0.39** |
-| Recall @ threshold 0.40 | 12 / 16 actual breakouts (75%) |
-| Precision @ threshold 0.40 | 12 / 64 predictions (19%) |
-| Brier Score | 0.065 |
+### Breakout Classifier — XGBoost (current production config)
+| Metric | Single-season (2024-25) | CV-pooled (22-23 / 23-24 / 24-25) |
+|---|---|---|
+| ROC-AUC | 0.897 | 0.865 |
+| Average Precision | 0.293 | **0.238** |
+| Recall @ threshold 0.40 | 10 / 16 (62%) | 25 / 54 (46%) |
+| Precision @ threshold 0.40 | 10 / 32 (31%) | 25 / 88 (28%) |
+| Brier Score | 0.039 | 0.041 |
 
-A "breakout" is defined as a season where a player both exceeds their prior career-high PPG by at least 0.15 *and* clears a 0.45 PPG floor (~37 points over 82 games). 16 such seasons occurred in 2024–25; the model surfaced 12 of them in its 64 highest-probability predictions.
+A "breakout" is defined as a season where a player both exceeds their prior career-high PPG by at least 0.15 *and* clears a 0.45 PPG floor (~37 points over 82 games). 16 such seasons occurred in 2024-25; the model flagged 10 of them in its 32 highest-probability predictions.
 
-![Breakout classifier — top 15 coefficients and precision-recall curve](assets/breakout_classifier.png)
+> **Honesty note on CV:** earlier runs of an ElasticNet logistic model hit AP 0.41 on a single test season (see Run #14 in the leaderboard). Adding cross-validation revealed that pooled AP collapsed to 0.20 — the headline number was largely test-season luck. The XGB model is now the production recommendation because it's stable across folds (per-fold APs 0.27 / 0.28 / 0.29). This kind of finding is the reason CV exists.
+
+![Breakout classifier — top 15 feature importances and precision-recall curve](assets/breakout_classifier.png)
 
 ### PPG Regressor
 | Metric | Value |
@@ -32,19 +34,19 @@ A "breakout" is defined as a season where a player both exceeds their prior care
 | RMSE | 0.137 |
 | MAE | 0.107 (PPG units, ~8 points / 82 games) |
 | R² | 0.796 |
-| Train R² | 0.774 (no overfitting) |
+| Train R² | 0.779 (no overfitting) |
 
 Defensemen MAE: 0.098 · Forwards MAE: 0.111 — model handles both positions cleanly without separate heads.
 
 ![PPG regressor — top 15 feature importances](assets/regressor_feature_importance.png)
 
-See [`LEADERBOARD_BREAKOUT.md`](LEADERBOARD_BREAKOUT.md) for the full run history (20+ experiments) and [`HYPERPARAMETERS.md`](HYPERPARAMETERS.md) for tuning details.
+See [`LEADERBOARD_BREAKOUT.md`](LEADERBOARD_BREAKOUT.md) for the full run history (26+ experiments including the MoneyPuck integration) and [`HYPERPARAMETERS.md`](HYPERPARAMETERS.md) for tuning details.
 
 ---
 
 ## Sample Predictions
 
-A few highlights from the 2024–25 test set ([full CSV](assets/sample_predictions_ppg.csv)):
+A few highlights from the 2024-25 test set ([full CSV](assets/sample_predictions_ppg.csv)):
 
 | Player | Actual PPG | Predicted | Error |
 |---|---|---|---|
@@ -54,16 +56,18 @@ A few highlights from the 2024–25 test set ([full CSV](assets/sample_predictio
 | Leo Carlsson | 0.96 | 0.63 | −0.33 |
 | Lucas Raymond | 0.95 | 0.95 | +0.00 |
 
-Top breakout-probability predictions for 2024–25 ([full CSV](assets/sample_predictions_breakout.csv)) — bold = actual breakout:
+Top breakout-probability predictions for 2024-25 ([full CSV](assets/sample_predictions_breakout.csv)) — bold = actual breakout:
 
 | Rank | Player | Breakout Prob | Actual |
 |---|---|---|---|
-| 1 | **Macklin Celebrini** | 0.87 | ✓ |
-| 2 | **Cutter Gauthier** | 0.84 | ✓ |
-| 3 | **Leo Carlsson** | 0.81 | ✓ |
-| 4 | **Connor Bedard** | 0.77 | ✓ |
-| 5 | **Will Smith** | 0.70 | ✓ |
-| 6 | **Matt Boldy** | 0.70 | ✓ |
+| 1 | Marco Kasper | 0.92 | — |
+| 2 | Cole Sillinger | 0.86 | — |
+| 3 | **Will Smith** | 0.85 | ✓ |
+| 4 | **Cutter Gauthier** | 0.85 | ✓ |
+| 5 | Adam Fantilli | 0.81 | — |
+| 6 | Quinton Byfield | 0.74 | — |
+| 7 | **Zach Benson** | 0.73 | ✓ |
+| 8 | **Matt Boldy** | 0.72 | ✓ |
 
 ---
 
@@ -79,11 +83,14 @@ pip install -r requirements.txt
 # Train the PPG regressor (~15s)
 python -m src.train_xgb
 
-# Train the breakout classifier (best config: Run 14)
-python -m src.train_breakout --model logistic --no-base-stats
+# Train the breakout classifier (XGB, default config)
+python -m src.train_breakout
+
+# Honest cross-validated evaluation (3 folds, ~30s)
+python -m src.train_breakout --cv
 ```
 
-Data is already committed (`data/*.parquet`), so no API calls are needed to reproduce results.
+Data is already committed (`data/*.parquet`, `data/moneypuck/*.csv`), so no API calls are needed to reproduce results.
 
 Useful flags:
 
@@ -91,14 +98,14 @@ Useful flags:
 # Headless / CI — save plot to file, skip display
 python -m src.train_breakout --no-plot --save-plot assets/breakout.png
 
-# Run hyperparameter CV (time-series split) before training
+# Run hyperparameter CV before training (logistic only)
 python -m src.train_breakout --model logistic --tune
 
 # Different test season
 python -m src.train_breakout --test-season 20232024
 
-# XGBoost variant with calibration
-python -m src.train_breakout --model xgb --calibrate sigmoid
+# XGBoost with probability calibration (sigmoid / isotonic)
+python -m src.train_breakout --calibrate sigmoid
 ```
 
 ---
@@ -106,20 +113,20 @@ python -m src.train_breakout --model xgb --calibrate sigmoid
 ## How It Works
 
 ```
-NHL APIs              feature engineering        models
-─────────             ───────────────────        ──────
-Landing API ─┐
-             ├─→ merge on (playerId, season) ─→ engineer ─→ XGB Regressor (PPG)
-Edge API ────┤        + (team, season)          80+ feats
-             │                                          └─→ Logistic Classifier (breakout)
-Stats API ───┘
+NHL APIs                            feature engineering        models
+─────────                           ───────────────────        ──────
+Landing API ────┐
+Edge API ───────┤                                        ┌──→ XGB Regressor (PPG)
+                ├─→ merge on (playerId, season) + ──→  80+ feats
+Stats API ──────┤      (team, season)                    └──→ XGB Classifier (breakout)
+MoneyPuck CSVs ─┘                                                  + Logistic / ElasticNet variant
 ```
 
-1. **Fetch** — `get_all_player_profiles.py`, `get_all_edge_stats.py`, `get_team_stats.py` pull from the NHL's Landing, Edge, and Stats APIs respectively.
-2. **Merge** — `merge_datasets.py` joins profile data (16 seasons, primary) with Edge tracking stats (2021–22+, left-joined) and team context. XGBoost handles the NaNs from the partial Edge coverage natively.
-3. **Engineer** — `feature_engineering.py` computes 80+ features: per-game rates, percentile ranks, career trajectory deltas (Δ TOI, Δ PPG), interaction terms (`ppg × career_high_gap`), team context (PP opportunity, faceoff share), and roster depth (`players_ahead_on_team`, `player_pp_share`).
-4. **Train** — strict temporal split (train on all seasons before test season). Logistic models use ElasticNet for feature selection; XGB models support sigmoid/isotonic calibration via `CalibratedClassifierCV`.
-5. **Evaluate** — TP/FP/FN at threshold, ROC-AUC, Average Precision, Brier score, Precision@K, lift, and per-position / per-tier MAE breakdowns.
+1. **Fetch** — `get_all_player_profiles.py`, `get_all_edge_stats.py`, `get_team_stats.py` pull from the NHL's Landing, Edge, and Stats APIs respectively. `load_moneypuck_stats.py` reads MoneyPuck's xG and shot-quality CSVs (manually downloaded, license-gated).
+2. **Merge** — `merge_datasets.py` joins profile data (16 seasons, primary) with Edge tracking (2021-22+, left-joined), team context, and MoneyPuck xG stats (2008-09+, left-joined). XGBoost handles the NaNs from partial coverage natively.
+3. **Engineer** — `feature_engineering.py` computes 80+ features: per-game rates, percentile ranks, career trajectory deltas (Δ TOI, Δ PPG), interaction terms (`ppg × career_high_gap`), team context (PP opportunity, faceoff share), roster depth (`players_ahead_on_team`), and **MoneyPuck-derived xG signals** (`xg_luck` = goals − expected goals, `oz_start_pct`, `xg_per_60`, `xg_high_danger_per_60`).
+4. **Train** — strict temporal split (train on all seasons before test season). XGB models use `eval_metric="aucpr"` and `scale_pos_weight` for the rare-positive breakout task. Logistic variant uses ElasticNet for sparse feature selection. Both support sigmoid / isotonic calibration via `CalibratedClassifierCV`.
+5. **Evaluate** — TP/FP/FN at threshold, ROC-AUC, Average Precision, Brier score, Precision@K, lift, and per-position / per-tier MAE breakdowns. The `--cv` flag runs rolling-origin cross-validation across the last 3 seasons and pools predictions — much harder for a model to look better than it is.
 
 For the full feature catalogue with formulas and rationale, see [`FEATURES.md`](FEATURES.md). For decisions about removed features (and why), see [`src/archived_features.py`](src/archived_features.py).
 
@@ -128,11 +135,11 @@ For the full feature catalogue with formulas and rationale, see [`FEATURES.md`](
 ## Tech Stack
 
 - **Python 3.11** · pandas · NumPy
+- **XGBoost** 2.x — regressor + classifier (primary models)
 - **scikit-learn** — LogisticRegression (ElasticNet), CalibratedClassifierCV, time-series CV
-- **XGBoost** 2.x — regressor + classifier
 - **matplotlib** — feature-importance bars, precision-recall curves
 - **Parquet (pyarrow)** — efficient on-disk dataset storage
-- **NHL public APIs** — Landing, Edge tracking, Stats
+- **Data sources** — NHL Landing API, NHL Edge tracking, NHL Stats API, [MoneyPuck](https://moneypuck.com/data.htm) xG dataset
 
 ---
 
@@ -141,20 +148,21 @@ For the full feature catalogue with formulas and rationale, see [`FEATURES.md`](
 ```
 src/                          Pipeline code (run as modules: python -m src.X)
   constants.py                Season list, edge-season cutoff, filters
-  feature_engineering.py      80+ engineered features (per-game, deltas, interactions)
+  feature_engineering.py      80+ engineered features (per-game, deltas, interactions, xG)
   tuning.py                   Time-series CV hyperparameter search
   archived_features.py        Removed features with rationale
-  data.py                     Merge utilities (profile-primary, edge left-joined)
+  data.py                     Merge utilities (profile-primary, edge / MoneyPuck left-joined)
 
   get_all_player_profiles.py  NHL Landing API → player season stats
   get_all_edge_stats.py       NHL Edge API → puck/skating tracking
   get_team_stats.py           NHL Stats API → team PP / faceoff context
-  merge_datasets.py           Combines all three into final training set
+  load_moneypuck_stats.py     MoneyPuck CSVs → xG / shot-quality parquet
+  merge_datasets.py           Combines all four sources into final training set
 
   train_xgb.py                PPG regressor (XGBoost)
-  train_breakout.py           Breakout classifier (logistic / XGB)
+  train_breakout.py           Breakout classifier (XGB / logistic), supports --cv
 
-data/                         Committed parquet datasets (no API calls needed)
+data/                         Committed parquet datasets + MoneyPuck CSVs (no API calls needed)
 models/                       Saved model artifacts (.joblib)
 assets/                       Plots + sample predictions used in this README
 scripts/                      One-off debug utilities
@@ -166,8 +174,8 @@ scripts/                      One-off debug utilities
 
 | Doc | What's in it |
 |---|---|
-| [`FEATURES.md`](FEATURES.md) | All 80+ features grouped by source (Landing / Edge / Team / Derived), with formulas and rationale |
+| [`FEATURES.md`](FEATURES.md) | All 80+ features grouped by source (Landing / Edge / Team / MoneyPuck / Derived), with formulas and rationale |
 | [`HYPERPARAMETERS.md`](HYPERPARAMETERS.md) | Hyperparameter tuning runs, CV configurations, calibration experiments |
-| [`LEADERBOARD_BREAKOUT.md`](LEADERBOARD_BREAKOUT.md) | Chronological log of 20+ breakout-classifier experiments — what was tried, what worked, what regressed |
+| [`LEADERBOARD_BREAKOUT.md`](LEADERBOARD_BREAKOUT.md) | Chronological log of 26+ breakout-classifier experiments — what was tried, what worked, what regressed |
 | [`LEADERBOARD_PPG.md`](LEADERBOARD_PPG.md) | PPG regressor runs (currently one tracked baseline + prior code-history context) |
 | [`.claude/CLAUDE.md`](.claude/CLAUDE.md) | Developer workflow notes (data pipeline commands, conventions for adding features) |
