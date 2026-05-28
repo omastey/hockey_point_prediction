@@ -1,20 +1,5 @@
 # Breakout Classifier — Run Leaderboard
 
-## TL;DR — Best Models
-
-| Best by | Run | Model | Avg Prec | ROC-AUC | Notes |
-|---|---|---|---|---|---|
-| **CV-pooled (honest)** | **#25** | XGB, 3-fold rolling-origin CV (Phase A MoneyPuck features) | **0.261** | 0.863 | Pooled across 2022-23/23-24/24-25 (1428 rows, 54 breakouts). Per-fold APs 0.265-0.280 — very stable (range 0.015). |
-| **Single-season P@K** | **#21** | XGB + raw MoneyPuck columns | 0.301 | 0.879 | P@10 jumped 30% → 60% (Lift@10 = 17.5×, the best ever). On_ice_corsi%, xg, on_ice_xg% all rank in top features. |
-| **Calibration (Brier)** | **#19** | XGB + Sigmoid calibration | 0.298 | 0.883 | Brier 0.028 (best calibrated); P@10 = 40%. |
-| ~~Single-season AP~~ | ~~#14~~ | ~~Logistic (ElasticNet, no base stats)~~ | ~~0.411~~ | ~~0.902~~ | **Run #26 (Logistic CV) revealed pooled AP 0.203 vs single-season 0.411 — the gap was largely test-season luck.** Run 14's headline number is not reproducible across seasons. |
-
-**Current production recommendation: Run #25** (XGB + Phase A MoneyPuck features, validated by 3-fold rolling-origin CV). The earlier Run #14 logistic model looked best on a single test season but CV exposed it as overfit to 2024-25 specifically.
-
-See full run details below for what was tried, what worked, and what regressed.
-
----
-
 Test set: season noted per run | Threshold: 0.30 (unless noted)
 
 | # | Model | Key Changes | TP | FP | FN | Prec | Recall | ROC-AUC | Avg Prec | Brier | Notes |

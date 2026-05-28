@@ -12,19 +12,6 @@ except ImportError:
 DISABLE_BASE_STATS = "--no-base-stats" in sys.argv
 NO_PLOT = "--no-plot" in sys.argv
 
-
-def _arg_value(flag):
-    """Read the value following ``flag`` from sys.argv, or None if missing."""
-    if flag in sys.argv:
-        idx = sys.argv.index(flag)
-        if idx + 1 < len(sys.argv):
-            return sys.argv[idx + 1]
-    return None
-
-
-SAVE_PLOT_PATH = _arg_value("--save-plot")
-SAVE_PREDICTIONS_PATH = _arg_value("--save-predictions")
-
 # Try XGBoost first; fall back to RandomForest if unavailable (e.g., missing libomp on macOS)
 try:
     from xgboost import XGBRegressor
@@ -293,26 +280,9 @@ for name in PLAYERS_TO_SHOW:
 # =====================
 # PLOT
 # =====================
-if SAVE_PREDICTIONS_PATH:
-    import os
-    os.makedirs(os.path.dirname(SAVE_PREDICTIONS_PATH) or ".", exist_ok=True)
-    test_df.sort_values("Abs_Error", ascending=True)[cols_to_show].to_csv(
-        SAVE_PREDICTIONS_PATH, index=False
-    )
-    print(f"\nPredictions saved to {SAVE_PREDICTIONS_PATH}")
-
-if not NO_PLOT or SAVE_PLOT_PATH:
+if not NO_PLOT:
     plt.figure(figsize=(10, 6))
     importances.head(15).sort_values().plot(kind="barh")
-    plt.title("Top 15 Feature Importances — PPG Regressor")
+    plt.title("Top 15 Feature Importances")
     plt.tight_layout()
-
-    if SAVE_PLOT_PATH:
-        import os
-        os.makedirs(os.path.dirname(SAVE_PLOT_PATH) or ".", exist_ok=True)
-        plt.savefig(SAVE_PLOT_PATH, dpi=120, bbox_inches="tight")
-        print(f"Plot saved to {SAVE_PLOT_PATH}")
-
-    if not NO_PLOT:
-        plt.show()
-    plt.close()
+    plt.show()

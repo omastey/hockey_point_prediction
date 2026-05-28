@@ -58,10 +58,6 @@ parser.add_argument("--test-season", type=str, default="20242025",
                     help="Season to use as test set (default: 20242025)")
 parser.add_argument("--no-plot", action="store_true",
                     help="Skip plot generation (for headless/CI runs)")
-parser.add_argument("--save-plot", type=str, default=None,
-                    help="Save plot to this file path (e.g., assets/breakout.png) instead of/in addition to showing")
-parser.add_argument("--save-predictions", type=str, default=None,
-                    help="Save full test-set predictions (probabilities + features) to this CSV path")
 parser.add_argument("--tune", action="store_true",
                     help="Run time-series CV to find best C, l1_ratio, class_weight before training")
 parser.add_argument("--calibrate", type=str, default="none",
@@ -517,20 +513,9 @@ else:
     print("\nNo actual breakouts in test set.")
 
 # =====================
-# SAVE PREDICTIONS
-# =====================
-if args.save_predictions:
-    import os
-    os.makedirs(os.path.dirname(args.save_predictions) or ".", exist_ok=True)
-    test_df.sort_values("breakout_prob", ascending=False)[cols_to_show].to_csv(
-        args.save_predictions, index=False
-    )
-    print(f"\nPredictions saved to {args.save_predictions}")
-
-# =====================
 # PLOT
 # =====================
-if not args.no_plot or args.save_plot:
+if not args.no_plot:
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     # Feature importance / coefficients
@@ -550,13 +535,4 @@ if not args.no_plot or args.save_plot:
         axes[1].set_title("Precision-Recall Curve")
 
     plt.tight_layout()
-
-    if args.save_plot:
-        import os
-        os.makedirs(os.path.dirname(args.save_plot) or ".", exist_ok=True)
-        plt.savefig(args.save_plot, dpi=120, bbox_inches="tight")
-        print(f"Plot saved to {args.save_plot}")
-
-    if not args.no_plot:
-        plt.show()
-    plt.close()
+    plt.show()
